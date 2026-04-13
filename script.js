@@ -8,7 +8,7 @@
 //  CONFIGURATION — Update BACKEND_URL with your OCI IP
 // ═══════════════════════════════════════════════════
 const CONFIG = {
-  BACKEND_URL: 'https://YOUR_OCI_IP:5000',   // Replace with actual backend
+  BACKEND_URL: 'https://139.185.61.225:5001',   // Replace with actual backend
   MAX_IMAGE_SIZE_MB: 10,
   RESIZE_MAX_DIMENSION: 2048,      // px before sending to OCR
   JPEG_QUALITY: 0.88,
