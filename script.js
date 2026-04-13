@@ -8,11 +8,11 @@
 //  CONFIGURATION — UPDATE THIS WITH YOUR BACKEND URL
 // ═══════════════════════════════════════════════════
 const CONFIG = {
-BACKEND_URL: 'https://api.silverfoxdynamics.com:5001'
+  BACKEND_URL: 'https://api.silverfoxdynamics.com/scandoc-api',
   MAX_IMAGE_SIZE_MB: 10,
   RESIZE_MAX_DIMENSION: 2048,
   JPEG_QUALITY: 0.88,
-  DEMO_MODE: false,  // DISABLED - using real backend
+  DEMO_MODE: false,
 };
 
 // ═══════════════════════════════════════════════════
