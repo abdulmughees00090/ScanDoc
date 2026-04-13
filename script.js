@@ -390,25 +390,23 @@ async function runTranslate() {
 }
 
 async function performTranslation(text, targetLang) {
-  const response = await fetch(`${CONFIG.BACKEND_URL}/api/translate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text, target: targetLang }),
-  });
+    const response = await fetch(`${CONFIG.BACKEND_URL}/api/translate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            text: text.substring(0, 5000),
+            target: targetLang,
+            source: 'en'  // Always use English as source
+        }),
+    });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Server error ${response.status}`);
-  }
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || `Server error ${response.status}`);
+    }
 
-  const data = await response.json();
-  return data.translated_text || text;
-}
-
-if (dom.copyTranslatedBtn) {
-  dom.copyTranslatedBtn.addEventListener('click', () => {
-    copyToClipboard(dom.translatedText.textContent, 'Translation copied!');
-  });
+    const data = await response.json();
+    return data.translated_text || text;
 }
 
 // ═══════════════════════════════════════════════════
