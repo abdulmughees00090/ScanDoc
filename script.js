@@ -8,7 +8,7 @@
 //  CONFIGURATION — UPDATE THIS WITH YOUR BACKEND URL
 // ═══════════════════════════════════════════════════
 const CONFIG = {
-  BACKEND_URL: 'http://152.70.237.211:5001',   // ⚠️ UPDATE: Replace with your OCI instance public IP
+  BACKEND_URL: 'http://139.185.61.225:5001',   // ⚠️ UPDATE: Replace with your OCI instance public IP
   MAX_IMAGE_SIZE_MB: 10,
   RESIZE_MAX_DIMENSION: 2048,
   JPEG_QUALITY: 0.88,
