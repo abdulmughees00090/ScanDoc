@@ -6,18 +6,18 @@ Allow: /
 Disallow: /cgi-bin/
 Disallow: /private/
 Disallow: /temp/
+Disallow: /assets/private/
 
-# Crawl delay to be respectful (optional)
+# Crawl delay to be respectful to server resources
 Crawl-delay: 1
 
-# Sitemap locations
+# Main sitemap (includes all URLs and images)
 Sitemap: https://scandoc.silverfoxdynamics.com/sitemap.xml
-Sitemap: https://scandoc.silverfoxdynamics.com/sitemap-images.xml
 
-# Host directive (optional, Google ignores but others respect)
+# Host directive (optional - Google ignores but Bing/Yandex may respect)
 Host: https://scandoc.silverfoxdynamics.com
 
-# Block AI/bot crawlers that ignore robots.txt (optional)
+# Block AI crawlers that might scrape content without attribution
 User-agent: GPTBot
 Disallow: /
 
@@ -26,3 +26,18 @@ Disallow: /
 
 User-agent: ChatGPT-User
 Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+
+# Allow Google's main crawler (explicit allow overrides above)
+User-agent: Googlebot
+Allow: /
+
+# Allow Bing
+User-agent: Bingbot
+Allow: /
+
+# Allow Yandex
+User-agent: Yandex
+Allow: /
