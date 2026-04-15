@@ -1,4 +1,28 @@
+# robots.txt for ScanDoc - OCR Tool
+# https://scandoc.silverfoxdynamics.com/robots.txt
+
 User-agent: *
 Allow: /
+Disallow: /cgi-bin/
+Disallow: /private/
+Disallow: /temp/
 
+# Crawl delay to be respectful (optional)
+Crawl-delay: 1
+
+# Sitemap locations
 Sitemap: https://scandoc.silverfoxdynamics.com/sitemap.xml
+Sitemap: https://scandoc.silverfoxdynamics.com/sitemap-images.xml
+
+# Host directive (optional, Google ignores but others respect)
+Host: https://scandoc.silverfoxdynamics.com
+
+# Block AI/bot crawlers that ignore robots.txt (optional)
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: ChatGPT-User
+Disallow: /
