@@ -652,3 +652,159 @@ function loadScript(src) {
   console.log('%cScanDoc initialized — Production Mode', 'color:#4CAF50;font-weight:bold;font-size:14px');
   console.log(`Backend URL: ${CONFIG.BACKEND_URL}`);
 })();
+
+
+// ============================================
+// PWA Installation - One-Click Shortcut
+// ============================================
+
+let deferredPrompt = null;
+const installBtn = document.getElementById('installPwaBtn');
+const mobileInstallBtn = document.getElementById('mobileInstallBtn');
+
+// Listen for the beforeinstallprompt event
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Prevent Chrome 67 and earlier from automatically showing the prompt
+  e.preventDefault();
+  
+  // Stash the event so it can be triggered later
+  deferredPrompt = e;
+  
+  // Show the install buttons
+  if (installBtn) {
+    installBtn.style.display = 'inline-flex';
+  }
+  if (mobileInstallBtn) {
+    mobileInstallBtn.style.display = 'flex';
+  }
+  
+  console.log('PWA installation is available');
+});
+
+// Handle install button click (desktop)
+if (installBtn) {
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) {
+      // If no deferred prompt, maybe the app is already installed or not supported
+      showToast('App is already installed or your browser doesn\'t support PWA installation', 'info');
+      return;
+    }
+    
+    // Show the install prompt
+    deferredPrompt.prompt();
+    
+    // Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    console.log(`User response to install prompt: ${outcome}`);
+    
+    // Clear the deferred prompt variable (it can only be used once)
+    deferredPrompt = null;
+    
+    // Hide the install buttons after the prompt is shown
+    if (installBtn) installBtn.style.display = 'none';
+    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+    
+    if (outcome === 'accepted') {
+      showToast('🎉 ScanDoc installed successfully! You can now access it from your home screen.', 'success');
+    } else {
+      showToast('You can install ScanDoc anytime from the browser menu.', 'info');
+    }
+  });
+}
+
+// Handle mobile menu install button
+if (mobileInstallBtn) {
+  mobileInstallBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    
+    if (!deferredPrompt) {
+      showToast('Open Chrome/Safari menu and tap "Add to Home Screen" to install ScanDoc', 'info');
+      return;
+    }
+    
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    
+    if (installBtn) installBtn.style.display = 'none';
+    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+    
+    if (outcome === 'accepted') {
+      showToast('🎉 ScanDoc installed successfully!', 'success');
+    }
+  });
+}
+
+// Optional: Show a floating install prompt after page load (gentle nudge)
+let installPromptShown = false;
+
+window.addEventListener('load', () => {
+  // Check if the app is already installed (standalone mode)
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
+                       window.navigator.standalone === true;
+  
+  // If already installed as PWA, hide install buttons permanently
+  if (isStandalone) {
+    if (installBtn) installBtn.style.display = 'none';
+    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+    return;
+  }
+  
+  // Show a gentle nudge after 3 seconds if installation is available
+  setTimeout(() => {
+    if (deferredPrompt && !installPromptShown && !isStandalone) {
+      installPromptShown = true;
+      
+      // Create a custom toast for install prompt
+      const toast = document.getElementById('toast');
+      if (toast) {
+        toast.textContent = '📱 Install ScanDoc as an app for faster access! Click here.';
+        toast.classList.add('show', 'install-prompt');
+        
+        // Make the toast clickable to trigger installation
+        toast.onclick = () => {
+          toast.classList.remove('show');
+          if (deferredPrompt) {
+            deferredPrompt.prompt();
+            deferredPrompt.userChoice.then(({ outcome }) => {
+              deferredPrompt = null;
+              if (installBtn) installBtn.style.display = 'none';
+              if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+            });
+          }
+          toast.onclick = null;
+        };
+        
+        // Auto-hide after 8 seconds
+        setTimeout(() => {
+          toast.classList.remove('show');
+          toast.onclick = null;
+        }, 8000);
+      }
+    }
+  }, 3000);
+});
+
+// Listen for app installed event
+window.addEventListener('appinstalled', () => {
+  console.log('PWA was installed');
+  deferredPrompt = null;
+  if (installBtn) installBtn.style.display = 'none';
+  if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+  showToast('✅ ScanDoc is now installed on your device!', 'success');
+});
+
+// Helper function for toast notifications (if not already defined)
+function showToast(message, type = 'info') {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  
+  toast.textContent = message;
+  toast.className = `toast ${type}`;
+  toast.classList.add('show');
+  
+  setTimeout(() => {
+    toast.classList.remove('show');
+  }, 4000);
+}
