@@ -11,7 +11,7 @@
   "theme_color": "#4caf50",
   "icons": [
     {
-      "src": "https://scandoc.silverfoxdynamics.com/favicon.ico",
+      "src": "https://scandoc.silverfoxdynamics.com/favicon.png",
       "type": "image/x-icon",
       "sizes": "145x145",
       "isSquare": true,
@@ -37,7 +37,7 @@
       "is192x192": false
     },
     {
-      "src": "https://scandoc.silverfoxdynamics.com/favicon.ico",
+      "src": "https://scandoc.silverfoxdynamics.com/favicon.png",
       "type": "image/x-icon",
       "sizes": "145x145",
       "isSquare": true,
