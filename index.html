@@ -1,43 +1,53 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-9GDW4LM8QN"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-9GDW4LM8QN');
-</script>
-   <!-- Google tag (gtag.js) end -->
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-9GDW4LM8QN"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-9GDW4LM8QN');
+  </script>
+  
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>ScanDoc – OCR, Image to Text & Translation</title>
   
   <!-- SEO Meta Tags -->
-  <meta name="description" content="Free OCR tool: extract text from images, convert documents to editable Word/Text, translate into 50+ languages. image to document converter." />
+  <meta name="description" content="Free OCR tool: extract text from images, convert documents to editable Word/Text, translate into 50+ languages. Image to document converter." />
   <meta name="keywords" content="OCR, image to text, document converter, handwriting to text, translation, image to document, free OCR, online OCR, text extractor, scan to word, multilingual OCR, camera scan, editable text" />
   <meta name="author" content="ScanDoc" />
   <meta name="robots" content="index, follow" />
   <meta name="googlebot" content="index, follow" />
   <meta name="bingbot" content="index, follow" />
+  
+  <!-- Canonical URL - FIXED -->
   <link rel="canonical" href="https://scandoc.silverfoxdynamics.com/" />
   
-  <!-- Open Graph / Social Media -->
+  <!-- Open Graph / Social Media - FIXED -->
   <meta property="og:title" content="ScanDoc – OCR & Document Processing" />
   <meta property="og:description" content="Extract text from images, convert to documents, translate instantly. Free. Fast. Private." />
   <meta property="og:type" content="website" />
-  <meta property="og:url" content="https://www.scandoc.com/" />
-  <meta property="og:image" content="logo.png" />
+  <meta property="og:url" content="https://scandoc.silverfoxdynamics.com/" />
+  <meta property="og:image" content="https://scandoc.silverfoxdynamics.com/logo.png" />
+  <meta property="og:image:width" content="512" />
+  <meta property="og:image:height" content="512" />
   
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="ScanDoc – OCR & Document Processing" />
   <meta name="twitter:description" content="Extract text from images, convert to documents, translate instantly. Free. Fast. Private." />
-  <meta name="twitter:image" content="logo.png" />
+  <meta name="twitter:image" content="https://scandoc.silverfoxdynamics.com/logo.png" />
   
-  <!-- Structured Data (JSON-LD) for SEO -->
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#4caf50" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ScanDoc" />
+  <link rel="apple-touch-icon" href="/icons/launchericon-192x192.png" />
+  
+  <!-- Structured Data (JSON-LD) for SEO - FIXED URL TYPO -->
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
@@ -52,32 +62,52 @@
       "priceCurrency": "USD"
     },
     "featureList": "OCR extraction, Image to Document, Multilingual translation, Live camera scan, Download as DOCX/TXT, Privacy first",
-    "url": "https://scandoc.silverfoxdynamicscom/"
+    "url": "https://scandoc.silverfoxdynamics.com/"
   }
   </script>
-  <link rel="manifest" href="/manifest.json">
-  <link rel="icon" type="image/x-icon" href="favicon.png" />
+  
+  <!-- Manifest & Icons -->
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/icons/launchericon-48x48.png" />
+  <link rel="icon" type="image/png" sizes="72x72" href="/icons/launchericon-72x72.png" />
+  <link rel="icon" type="image/png" sizes="96x96" href="/icons/launchericon-96x96.png" />
+  <link rel="icon" type="image/png" sizes="144x144" href="/icons/launchericon-144x144.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/launchericon-192x192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/icons/launchericon-512x512.png" />
+  
+  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <!-- Updated fonts: Inter for headings (clean, simple), DM Sans for body (preserved) -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+  
+  <!-- Stylesheets -->
   <link rel="stylesheet" href="style.css" />
+  
+  <!-- Monetag Ad Script -->
   <script src="https://quge5.com/88/tag.min.js" data-zone="229439" async data-cfasync="false"></script>
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2830535043426573"
-     crossorigin="anonymous"></script>
+  
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(registration => {
+            console.log('Service Worker registered successfully:', registration.scope);
+          })
+          .catch(error => {
+            console.log('Service Worker registration failed:', error);
+          });
+      });
+    }
+  </script>
 </head>
 <body>
-
-  <!-- ═══════════════════════════════════════
-       AD SLOTS COMPLETELY REMOVED as per requirement
-  ════════════════════════════════════════ -->
 
   <!-- ══════════ NAVBAR ══════════ -->
   <header class="navbar">
     <div class="navbar__inner">
       <a class="navbar__brand" href="#">
         <div class="navbar__logo">
-          <!-- Replaced SVG logo with actual logo.png file -->
           <img src="logo.png" alt="ScanDoc Logo" width="32" height="32" style="display: block; object-fit: contain;" />
         </div>
         <span class="navbar__name">ScanDoc</span>
@@ -204,8 +234,6 @@
     </div>
   </section>
 
-  <!-- AD SLOT REMOVED -->
-
   <!-- ══════════ HOW IT WORKS ══════════ -->
   <section class="how-it-works" id="how-it-works">
     <div class="container">
@@ -238,19 +266,7 @@
       </div>
     </div>
   </section>
-<!-- Google Ad Unit-->
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2830535043426573"
-     crossorigin="anonymous"></script>
-<!-- Drawer Banner -->
-<ins class="adsbygoogle"
-     style="display:block"
-     data-ad-client="ca-pub-2830535043426573"
-     data-ad-slot="4833729743"
-     data-ad-format="auto"
-     data-full-width-responsive="true"></ins>
-<script>
-     (adsbygoogle = window.adsbygoogle || []).push({});
-</script>
+
   <!-- ══════════ MAIN APP ══════════ -->
   <section class="app-section" id="app">
     <div class="container">
@@ -258,7 +274,7 @@
       <h2 class="section-title">Start processing<br />your documents</h2>
 
       <div class="app-card">
-        <!-- ── TAB BAR ── -->
+        <!-- Tab Bar -->
         <div class="tab-bar">
           <button class="tab-btn active" data-tab="upload" id="tabUpload">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
@@ -277,7 +293,7 @@
           </button>
         </div>
 
-        <!-- ── UPLOAD TAB ── -->
+        <!-- Upload Tab -->
         <div class="tab-panel active" id="panelUpload">
           <div class="drop-zone" id="dropZone">
             <input type="file" id="fileInput" accept="image/*" class="drop-zone__input" />
@@ -299,7 +315,7 @@
           </div>
         </div>
 
-        <!-- ── CAMERA TAB ── -->
+        <!-- Camera Tab -->
         <div class="tab-panel" id="panelCamera">
           <div class="camera-area" id="cameraArea">
             <div class="camera-placeholder" id="cameraPlaceholder">
@@ -324,25 +340,13 @@
             </div>
           </div>
           <div class="camera-controls">
-            <button class="btn btn--primary" id="startCameraBtn">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <rect x="1" y="3" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/>
-                <circle cx="8" cy="8" r="2.5" fill="currentColor"/>
-              </svg>
-              Start Camera
-            </button>
-            <button class="btn btn--secondary" id="captureCameraBtn" disabled>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="5" stroke="currentColor" stroke-width="1.6"/>
-                <circle cx="8" cy="8" r="2" fill="currentColor"/>
-              </svg>
-              Capture Frame
-            </button>
+            <button class="btn btn--primary" id="startCameraBtn">Start Camera</button>
+            <button class="btn btn--secondary" id="captureCameraBtn" disabled>Capture Frame</button>
             <button class="btn btn--ghost" id="stopCameraBtn" style="display:none;">Stop</button>
           </div>
         </div>
 
-        <!-- ── OPTIONS ROW ── -->
+        <!-- Options Row -->
         <div class="options-row">
           <div class="option-group">
             <label for="ocrLang">Source Language</label>
@@ -373,7 +377,7 @@
           </div>
         </div>
 
-        <!-- ── PROCESS BUTTON ── -->
+        <!-- Process Button -->
         <div class="process-row">
           <button class="btn btn--primary btn--lg btn--full" id="processBtn" disabled>
             <span class="btn-text">Extract Text</span>
@@ -381,149 +385,54 @@
           </button>
         </div>
 
-        <!-- ── PROGRESS INDICATOR ── -->
+        <!-- Progress Indicator -->
         <div class="progress-area" id="progressArea" style="display:none;">
           <div class="progress-steps">
-            <div class="progress-step" id="ps1">
-              <div class="ps-dot"></div>
-              <span>Preprocessing image</span>
-            </div>
-            <div class="progress-step" id="ps2">
-              <div class="ps-dot"></div>
-              <span>Running OCR</span>
-            </div>
-            <div class="progress-step" id="ps3">
-              <div class="ps-dot"></div>
-              <span>Extracting text</span>
-            </div>
-            <div class="progress-step" id="ps4">
-              <div class="ps-dot"></div>
-              <span>Preparing output</span>
-            </div>
+            <div class="progress-step" id="ps1"><div class="ps-dot"></div><span>Preprocessing image</span></div>
+            <div class="progress-step" id="ps2"><div class="ps-dot"></div><span>Running OCR</span></div>
+            <div class="progress-step" id="ps3"><div class="ps-dot"></div><span>Extracting text</span></div>
+            <div class="progress-step" id="ps4"><div class="ps-dot"></div><span>Preparing output</span></div>
           </div>
           <div class="scan-progress-bar">
             <div class="scan-progress-fill" id="scanProgressFill"></div>
           </div>
         </div>
 
-        <!-- ── RESULTS AREA ── -->
+        <!-- Results Area -->
         <div class="results-area" id="resultsArea" style="display:none;">
           <div class="results-header">
             <h3 class="results-title">Extracted Text</h3>
             <div class="results-actions">
-              <button class="btn btn--sm btn--ghost" id="copyBtn" title="Copy to clipboard">
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <rect x="4" y="4" width="8" height="8" rx="1.5" stroke="currentColor" stroke-width="1.4"/>
-                  <path d="M2 10V2h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-                Copy
-              </button>
+              <button class="btn btn--sm btn--ghost" id="copyBtn">Copy</button>
               <button class="btn btn--sm btn--ghost" id="clearResultsBtn">Clear</button>
             </div>
           </div>
           <textarea class="results-text" id="resultsText" placeholder="Extracted text will appear here…" spellcheck="false"></textarea>
 
-          <!-- AD SLOT POST-PROCESS REMOVED -->
-
           <!-- Translation section -->
           <div class="translate-section">
-            <h4 class="translate-title">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M2 8a6 6 0 1 0 12 0A6 6 0 0 0 2 8z" stroke="currentColor" stroke-width="1.5"/>
-                <path d="M5 8h6M8 5c-1.2 1.2-1.2 4.8 0 6M8 5c1.2 1.2 1.2 4.8 0 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-              </svg>
-              Translate Extracted Text
-            </h4>
+            <h4 class="translate-title">Translate Extracted Text</h4>
             <div class="translate-controls">
               <select id="translateTo" class="translate-select">
                 <option value="">— Select target language —</option>
-                <option value="af">Afrikaans</option>
-                <option value="sq">Albanian</option>
-                <option value="ar">Arabic</option>
-                <option value="hy">Armenian</option>
-                <option value="az">Azerbaijani</option>
-                <option value="eu">Basque</option>
-                <option value="be">Belarusian</option>
-                <option value="bn">Bengali</option>
-                <option value="bs">Bosnian</option>
-                <option value="bg">Bulgarian</option>
-                <option value="ca">Catalan</option>
-                <option value="zh">Chinese (Simplified)</option>
-                <option value="zh-TW">Chinese (Traditional)</option>
-                <option value="hr">Croatian</option>
-                <option value="cs">Czech</option>
-                <option value="da">Danish</option>
-                <option value="nl">Dutch</option>
-                <option value="en">English</option>
-                <option value="et">Estonian</option>
-                <option value="tl">Filipino</option>
-                <option value="fi">Finnish</option>
-                <option value="fr">French</option>
-                <option value="gl">Galician</option>
-                <option value="ka">Georgian</option>
-                <option value="de">German</option>
-                <option value="el">Greek</option>
-                <option value="gu">Gujarati</option>
-                <option value="ht">Haitian Creole</option>
-                <option value="iw">Hebrew</option>
-                <option value="hi">Hindi</option>
-                <option value="hu">Hungarian</option>
-                <option value="is">Icelandic</option>
-                <option value="id">Indonesian</option>
-                <option value="ga">Irish</option>
-                <option value="it">Italian</option>
-                <option value="ja">Japanese</option>
-                <option value="kn">Kannada</option>
-                <option value="kk">Kazakh</option>
-                <option value="km">Khmer</option>
-                <option value="ko">Korean</option>
-                <option value="lo">Lao</option>
-                <option value="lv">Latvian</option>
-                <option value="lt">Lithuanian</option>
-                <option value="mk">Macedonian</option>
-                <option value="ms">Malay</option>
-                <option value="ml">Malayalam</option>
-                <option value="mt">Maltese</option>
-                <option value="mr">Marathi</option>
-                <option value="mn">Mongolian</option>
-                <option value="my">Myanmar (Burmese)</option>
-                <option value="ne">Nepali</option>
-                <option value="no">Norwegian</option>
-                <option value="ps">Pashto</option>
-                <option value="fa">Persian</option>
-                <option value="pl">Polish</option>
-                <option value="pt">Portuguese</option>
-                <option value="pa">Punjabi</option>
-                <option value="ro">Romanian</option>
-                <option value="ru">Russian</option>
-                <option value="sr">Serbian</option>
-                <option value="si">Sinhala</option>
-                <option value="sk">Slovak</option>
-                <option value="sl">Slovenian</option>
-                <option value="so">Somali</option>
                 <option value="es">Spanish</option>
-                <option value="sw">Swahili</option>
-                <option value="sv">Swedish</option>
-                <option value="tg">Tajik</option>
-                <option value="ta">Tamil</option>
-                <option value="te">Telugu</option>
-                <option value="th">Thai</option>
+                <option value="fr">French</option>
+                <option value="de">German</option>
+                <option value="zh">Chinese (Simplified)</option>
+                <option value="ja">Japanese</option>
+                <option value="ko">Korean</option>
+                <option value="ar">Arabic</option>
+                <option value="hi">Hindi</option>
+                <option value="ru">Russian</option>
+                <option value="pt">Portuguese</option>
+                <option value="it">Italian</option>
                 <option value="tr">Turkish</option>
-                <option value="uk">Ukrainian</option>
-                <option value="ur">Urdu</option>
-                <option value="uz">Uzbek</option>
+                <option value="nl">Dutch</option>
+                <option value="pl">Polish</option>
                 <option value="vi">Vietnamese</option>
-                <option value="cy">Welsh</option>
-                <option value="yi">Yiddish</option>
-                <option value="yo">Yoruba</option>
-                <option value="zu">Zulu</option>
+                <option value="th">Thai</option>
               </select>
-              <button class="btn btn--secondary" id="translateBtn">
-                Translate
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                  <path d="M2 7h10M8 3l4 4-4 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
-              </button>
+              <button class="btn btn--secondary" id="translateBtn">Translate</button>
             </div>
             <div class="translated-output" id="translatedOutput" style="display:none;">
               <div class="translated-output__header">
@@ -536,30 +445,12 @@
 
           <!-- Download section -->
           <div class="download-section">
-            <button class="btn btn--primary btn--download" id="downloadBtn">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <path d="M8 2v9M4 8l4 5 4-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M2 13h12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
-              </svg>
-              Download Document
-            </button>
+            <button class="btn btn--primary btn--download" id="downloadBtn">Download Document</button>
           </div>
         </div>
       </div>
     </div>
   </section>
-
-  <!-- GOOGLE AD SLOT -->
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2830535043426573"
-     crossorigin="anonymous"></script>
-<ins class="adsbygoogle"
-     style="display:block"
-     data-ad-format="autorelaxed"
-     data-ad-client="ca-pub-2830535043426573"
-     data-ad-slot="9785627347"></ins>
-<script>
-     (adsbygoogle = window.adsbygoogle || []).push({});
-</script>
 
   <!-- ══════════ FOOTER ══════════ -->
   <footer class="footer">
