@@ -9,7 +9,7 @@
 // ═══════════════════════════════════════════════════
 const CONFIG = {
   // DeepSeek API Configuration
-  DEEPSEEK_API_KEY: 'YOUR_DEEPSEEK_API_KEY_HERE',  // ← REPLACE WITH YOUR NEW SECRET KEY
+  DEEPSEEK_API_KEY: 'sk-1a3179bec5ae4a8ebcc645259abdc65f',
   DEEPSEEK_API_URL: 'https://api.deepseek.com/v1/chat/completions',
   DEEPSEEK_MODEL: 'deepseek-chat',
   
