@@ -1,63 +1,54 @@
 {
-  "background_color": "#ffffff",
-  "description": "Free OCR tool: extract text from images, convert documents to editable Word/Text, translate into 50+ languages. image to document converter.",
-  "dir": "ltr",
-  "display": "standalone",
-  "name": "ScanDoc – OCR &amp; Document Processing",
-  "orientation": "any",
-  "scope": "/",
-  "short_name": "Scan Doc",
+  "name": "ScanDoc – OCR & Document Processing",
+  "short_name": "ScanDoc",
+  "description": "Free OCR tool: extract text from images, convert documents to editable Word/Text, translate into 50+ languages. Image to document converter.",
   "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "any",
   "theme_color": "#4caf50",
+  "background_color": "#ffffff",
+  "lang": "en",
+  "dir": "ltr",
+  "id": "ScanDocOCR",
+  "categories": ["education", "productivity"],
   "icons": [
     {
-      "src": "https://scandoc.silverfoxdynamics.com/favicon.png",
-      "type": "image/x-icon",
-      "sizes": "145x145",
-      "isSquare": true,
-      "isPng": false,
-      "isWebp": false,
-      "isJpg": false,
-      "width": 145,
-      "is512x512": false,
-      "is256x256": false,
-      "is192x192": false
-    },
-    {
-      "src": "https://scandoc.silverfoxdynamics.com/logo.png",
+      "src": "/icons/launchericon-48x48.png",
+      "sizes": "48x48",
       "type": "image/png",
-      "sizes": "145x145",
-      "isSquare": true,
-      "isPng": true,
-      "isWebp": false,
-      "isJpg": false,
-      "width": 145,
-      "is512x512": false,
-      "is256x256": false,
-      "is192x192": false
+      "purpose": "any maskable"
     },
     {
-      "src": "https://scandoc.silverfoxdynamics.com/favicon.png",
-      "type": "image/x-icon",
-      "sizes": "145x145",
-      "isSquare": true,
-      "isPng": false,
-      "isWebp": false,
-      "isJpg": false,
-      "width": 145,
-      "is512x512": false,
-      "is256x256": false,
-      "is192x192": false
+      "src": "/icons/launchericon-72x72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/launchericon-96x96.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/launchericon-144x144.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/launchericon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/launchericon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
-  ],
-  "id": "ScanDocOCR",
-  "lang": "en",
-  "display_override": [
-    "window-controls-overlay",
-    "standalone"
-  ],
-  "categories": [
-    "education",
-    "productivity"
   ]
 }
