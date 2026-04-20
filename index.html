@@ -103,7 +103,7 @@
 </head>
 <body>
 
-  <!-- ══════════ NAVBAR ══════════ -->
+    <!-- ══════════ NAVBAR ══════════ -->
   <header class="navbar">
     <div class="navbar__inner">
       <a class="navbar__brand" href="#">
@@ -115,7 +115,14 @@
       <nav class="navbar__links">
         <a href="#features">Features</a>
         <a href="#how-it-works">How It Works</a>
-        <a href="#app" class="btn btn--nav">Launch App</a>
+        <a href="#app" class="btn btn--nav" id="startConvertingBtn">Start Converting</a>
+        <button class="btn btn--nav btn--install" id="installPwaBtn" style="display: none;">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right: 6px;">
+            <path d="M2 12h12M8 2v9M5 8l3 3 3-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="2" y="12" width="12" height="2" fill="currentColor" opacity="0.3"/>
+          </svg>
+          Install App
+        </button>
       </nav>
       <button class="navbar__toggle" id="navToggle" aria-label="Toggle menu">
         <span></span><span></span><span></span>
@@ -124,7 +131,8 @@
     <div class="navbar__mobile" id="navMobile">
       <a href="#features">Features</a>
       <a href="#how-it-works">How It Works</a>
-      <a href="#app">Start Scanning</a>
+      <a href="#app">Start Converting</a>
+      <a href="#" id="mobileInstallBtn" style="display: none;">📲 Install App</a>
     </div>
   </header>
 
