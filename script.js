@@ -1,26 +1,24 @@
 /**
  * ScanDoc — Main Application Script
- * Features: OCR (DeepSeek AI + OCI Fallback), Camera Capture, Translation, DOCX Download
- * Backend: DeepSeek API (primary) + OCI Flask API (fallback)
+ * Features: OCR (OCI Backend), Translation (DeepSeek AI + OCI Fallback)
  */
 
 // ═══════════════════════════════════════════════════
 //  CONFIGURATION
 // ═══════════════════════════════════════════════════
 const CONFIG = {
-  // DeepSeek API Configuration
-  DEEPSEEK_API_KEY: 'sk-1a3179bec5ae4a8ebcc645259abdc65f',
+  // DeepSeek API Configuration (Translation Only)
+  DEEPSEEK_API_KEY: 'YOUR_NEW_SECRET_API_KEY_HERE',  // ← REPLACE WITH YOUR NEW KEY
   DEEPSEEK_API_URL: 'https://api.deepseek.com/v1/chat/completions',
   DEEPSEEK_MODEL: 'deepseek-chat',
   
-  // OCI Backend Fallback
+  // OCI Backend (OCR + Fallback)
   BACKEND_URL: 'https://api.silverfoxdynamics.com/scandoc',
   
   // Image Processing
   MAX_IMAGE_SIZE_MB: 10,
   RESIZE_MAX_DIMENSION: 2048,
   JPEG_QUALITY: 0.88,
-  DEMO_MODE: false,
 };
 
 // ═══════════════════════════════════════════════════
@@ -79,24 +77,12 @@ const state = {
   translatedText: '',
   cameraStream: null,
   isProcessing: false,
-  usingDeepSeek: true,
+  usingDeepSeekForTranslation: true,
 };
 
 // ═══════════════════════════════════════════════════
 //  UTILITY FUNCTIONS
 // ═══════════════════════════════════════════════════
-function blobToBase64(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const base64 = reader.result.split(',')[1];
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
-}
-
 function showToast(message, type = 'success') {
   if (!dom.toast) return;
   clearTimeout(window.toastTimeout);
@@ -119,59 +105,8 @@ function loadScript(src) {
 }
 
 // ═══════════════════════════════════════════════════
-//  DEEPSEEK API FUNCTIONS
+//  DEEPSEEK TRANSLATION ONLY (No OCR)
 // ═══════════════════════════════════════════════════
-
-async function performDeepSeekOCR(imageBlob) {
-  try {
-    const base64Image = await blobToBase64(imageBlob);
-    
-    const requestBody = {
-      model: CONFIG.DEEPSEEK_MODEL,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:image/jpeg;base64,${base64Image}`
-              }
-            },
-            {
-              type: "text",
-              text: "Extract ALL text from this image exactly as written. Preserve line breaks and formatting. Output ONLY the extracted text, no explanations, no additional text, no quotes around the output."
-            }
-          ]
-        }
-      ],
-      max_tokens: 4096,
-      temperature: 0.1
-    };
-    
-    const response = await fetch(CONFIG.DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${CONFIG.DEEPSEEK_API_KEY}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || `API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.choices[0].message.content;
-    
-  } catch (error) {
-    console.error('DeepSeek OCR failed:', error);
-    throw error;
-  }
-}
-
 async function performDeepSeekTranslation(text, targetLang, sourceLang = 'auto') {
   try {
     const languageNames = {
@@ -217,7 +152,12 @@ ${text.substring(0, 4000)}`
     }
     
     const data = await response.json();
-    return data.choices[0].message.content;
+    let translated = data.choices[0].message.content;
+    
+    // Clean up any quotes or extra formatting
+    translated = translated.replace(/^["']|["']$/g, '');
+    
+    return translated;
     
   } catch (error) {
     console.error('DeepSeek translation failed:', error);
@@ -226,9 +166,8 @@ ${text.substring(0, 4000)}`
 }
 
 // ═══════════════════════════════════════════════════
-//  OCI FALLBACK FUNCTIONS
+//  OCI FUNCTIONS (OCR + Translation Fallback)
 // ═══════════════════════════════════════════════════
-
 async function performOCIOCR(imageBlob) {
   const formData = new FormData();
   formData.append('image', imageBlob, 'document.jpg');
@@ -269,23 +208,10 @@ async function performOCITranslation(text, targetLang) {
 }
 
 // ═══════════════════════════════════════════════════
-//  MAIN OCR FUNCTION (DeepSeek + OCI Fallback)
+//  MAIN OCR FUNCTION (OCI Only - DeepSeek doesn't support images)
 // ═══════════════════════════════════════════════════
 async function performOCR(imageBlob) {
-  // Try DeepSeek first if API key is configured
-  if (CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_DEEPSEEK_API_KEY_HERE') {
-    try {
-      state.usingDeepSeek = true;
-      const text = await performDeepSeekOCR(imageBlob);
-      return text;
-    } catch (error) {
-      console.warn('DeepSeek OCR failed, falling back to OCI:', error);
-      showToast('DeepSeek unavailable, using backup OCR...', 'info');
-    }
-  }
-  
-  // Fallback to OCI
-  state.usingDeepSeek = false;
+  // OCI backend for OCR (DeepSeek doesn't support image input)
   return await performOCIOCR(imageBlob);
 }
 
@@ -294,17 +220,19 @@ async function performOCR(imageBlob) {
 // ═══════════════════════════════════════════════════
 async function performTranslation(text, targetLang) {
   // Try DeepSeek first if API key is configured
-  if (CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_DEEPSEEK_API_KEY_HERE') {
+  if (CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_NEW_SECRET_API_KEY_HERE') {
     try {
+      state.usingDeepSeekForTranslation = true;
       const translated = await performDeepSeekTranslation(text, targetLang);
       return translated;
     } catch (error) {
       console.warn('DeepSeek translation failed, falling back to OCI:', error);
-      showToast('DeepSeek translation unavailable, using backup...', 'info');
+      showToast('DeepSeek unavailable, using backup translation...', 'info');
     }
   }
   
   // Fallback to OCI
+  state.usingDeepSeekForTranslation = false;
   return await performOCITranslation(text, targetLang);
 }
 
@@ -550,8 +478,6 @@ async function runOCR() {
     const processedBlob = await preprocessImage(source);
 
     await animateStep(dom.ps2, 20, 60);
-    
-    showToast('Processing with DeepSeek AI...', 'info');
     const text = await performOCR(processedBlob);
 
     await animateStep(dom.ps3, 60, 85);
@@ -562,9 +488,7 @@ async function runOCR() {
 
     hideProgressArea();
     showResults();
-    
-    const sourceText = state.usingDeepSeek ? 'DeepSeek AI' : 'Standard OCR';
-    showToast(`Text extracted successfully! (${sourceText})`, 'success');
+    showToast('Text extracted successfully!', 'success');
   } catch (err) {
     hideProgressArea();
     showToast(`Error: ${err.message}`, 'error');
@@ -592,7 +516,6 @@ async function runTranslate() {
   dom.translateBtn.innerHTML = `<span class="btn-spinner"></span> Translating…`;
 
   try {
-    showToast('Translating with DeepSeek AI...', 'info');
     const translated = await performTranslation(text, targetLang);
     state.translatedText = translated;
 
@@ -601,7 +524,8 @@ async function runTranslate() {
     dom.translatedText.textContent = translated;
     dom.translatedOutput.style.display = 'block';
 
-    showToast('Translation complete!', 'success');
+    const sourceText = state.usingDeepSeekForTranslation ? 'DeepSeek AI' : 'Standard';
+    showToast(`Translation complete! (${sourceText})`, 'success');
   } catch (err) {
     showToast(`Translation failed: ${err.message}`, 'error');
   } finally {
@@ -819,16 +743,16 @@ if (dom.clearResultsBtn) {
   updateProcessButton();
   
   // Check if DeepSeek API key is configured
-  const hasDeepSeekKey = CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_DEEPSEEK_API_KEY_HERE';
+  const hasDeepSeekKey = CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_NEW_SECRET_API_KEY_HERE';
   
-  console.log('%cScanDoc initialized — DeepSeek AI Mode', 'color:#4CAF50;font-weight:bold;font-size:14px');
-  console.log(`DeepSeek API: ${hasDeepSeekKey ? '✅ Configured' : '❌ Not configured (using OCI fallback)'}`);
-  console.log(`OCI Backend: ${CONFIG.BACKEND_URL}`);
+  console.log('%cScanDoc initialized — DeepSeek Translation Mode', 'color:#4CAF50;font-weight:bold;font-size:14px');
+  console.log(`DeepSeek Translation API: ${hasDeepSeekKey ? '✅ Configured' : '❌ Not configured'}`);
+  console.log(`OCI Backend (OCR): ${CONFIG.BACKEND_URL}`);
   
   if (hasDeepSeekKey) {
-    showToast('✨ ScanDoc ready! Using DeepSeek AI for accurate OCR', 'success');
+    showToast('✨ ScanDoc ready! Translation powered by DeepSeek AI', 'success');
   } else {
-    showToast('⚠️ ScanDoc ready! Add DeepSeek API key for better accuracy', 'info');
+    showToast('⚠️ ScanDoc ready! Add DeepSeek API key for better translation', 'info');
   }
 })();
 
