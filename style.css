@@ -1183,3 +1183,45 @@ select, textarea { font-family: var(--font-body); }
   .translate-controls { flex-direction: column; }
   .translate-select { width: 100%; }
 }
+
+
+/* ── PWA INSTALL BUTTON ── */
+.btn--install {
+  background: linear-gradient(45deg, #1a2e1c, #2e7d32);
+  color: white !important;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  transition: all 0.22s ease;
+}
+
+.btn--install:hover {
+  background: linear-gradient(45deg, #2e7d32, #1a5e1e);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+}
+
+.btn--install svg {
+  stroke: white;
+}
+
+/* Install button in mobile menu */
+.navbar__mobile a[href="#"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #2e7d32;
+  font-weight: 600;
+}
+
+/* Install prompt toast style */
+.toast.install-prompt {
+  background: linear-gradient(135deg, #1a2e1c, #2e7d32);
+  border-left: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.toast.install-prompt:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
