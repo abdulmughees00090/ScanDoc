@@ -1,0 +1,63 @@
+{
+  "background_color": "#ffffff",
+  "description": "Free OCR tool: extract text from images, convert documents to editable Word/Text, translate into 50+ languages. image to document converter.",
+  "dir": "ltr",
+  "display": "standalone",
+  "name": "ScanDoc – OCR &amp; Document Processing",
+  "orientation": "any",
+  "scope": "/",
+  "short_name": "Scan Doc",
+  "start_url": "/",
+  "theme_color": "#4caf50",
+  "icons": [
+    {
+      "src": "https://scandoc.silverfoxdynamics.com/favicon.ico",
+      "type": "image/x-icon",
+      "sizes": "145x145",
+      "isSquare": true,
+      "isPng": false,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 145,
+      "is512x512": false,
+      "is256x256": false,
+      "is192x192": false
+    },
+    {
+      "src": "https://scandoc.silverfoxdynamics.com/logo.png",
+      "type": "image/png",
+      "sizes": "145x145",
+      "isSquare": true,
+      "isPng": true,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 145,
+      "is512x512": false,
+      "is256x256": false,
+      "is192x192": false
+    },
+    {
+      "src": "https://scandoc.silverfoxdynamics.com/favicon.ico",
+      "type": "image/x-icon",
+      "sizes": "145x145",
+      "isSquare": true,
+      "isPng": false,
+      "isWebp": false,
+      "isJpg": false,
+      "width": 145,
+      "is512x512": false,
+      "is256x256": false,
+      "is192x192": false
+    }
+  ],
+  "id": "ScanDocOCR",
+  "lang": "en",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
+  "categories": [
+    "education",
+    "productivity"
+  ]
+}
