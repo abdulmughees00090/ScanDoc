@@ -1,14 +1,22 @@
 /**
  * ScanDoc — Main Application Script
- * Features: OCR, Camera Capture, Translation, DOCX Download
- * Backend: OCI Flask API
+ * Features: OCR (DeepSeek AI + OCI Fallback), Camera Capture, Translation, DOCX Download
+ * Backend: DeepSeek API (primary) + OCI Flask API (fallback)
  */
 
 // ═══════════════════════════════════════════════════
-//  CONFIGURATION — UPDATE THIS WITH YOUR BACKEND URL
+//  CONFIGURATION
 // ═══════════════════════════════════════════════════
 const CONFIG = {
+  // DeepSeek API Configuration
+  DEEPSEEK_API_KEY: 'YOUR_DEEPSEEK_API_KEY_HERE',  // ← REPLACE WITH YOUR NEW SECRET KEY
+  DEEPSEEK_API_URL: 'https://api.deepseek.com/v1/chat/completions',
+  DEEPSEEK_MODEL: 'deepseek-chat',
+  
+  // OCI Backend Fallback
   BACKEND_URL: 'https://api.silverfoxdynamics.com/scandoc',
+  
+  // Image Processing
   MAX_IMAGE_SIZE_MB: 10,
   RESIZE_MAX_DIMENSION: 2048,
   JPEG_QUALITY: 0.88,
@@ -71,7 +79,273 @@ const state = {
   translatedText: '',
   cameraStream: null,
   isProcessing: false,
+  usingDeepSeek: true,
 };
+
+// ═══════════════════════════════════════════════════
+//  UTILITY FUNCTIONS
+// ═══════════════════════════════════════════════════
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64 = reader.result.split(',')[1];
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function showToast(message, type = 'success') {
+  if (!dom.toast) return;
+  clearTimeout(window.toastTimeout);
+  dom.toast.textContent = message;
+  dom.toast.className = `toast show ${type}`;
+  window.toastTimeout = setTimeout(() => {
+    dom.toast.classList.remove('show');
+  }, 3400);
+}
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  DEEPSEEK API FUNCTIONS
+// ═══════════════════════════════════════════════════
+
+async function performDeepSeekOCR(imageBlob) {
+  try {
+    const base64Image = await blobToBase64(imageBlob);
+    
+    const requestBody = {
+      model: CONFIG.DEEPSEEK_MODEL,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:image/jpeg;base64,${base64Image}`
+              }
+            },
+            {
+              type: "text",
+              text: "Extract ALL text from this image exactly as written. Preserve line breaks and formatting. Output ONLY the extracted text, no explanations, no additional text, no quotes around the output."
+            }
+          ]
+        }
+      ],
+      max_tokens: 4096,
+      temperature: 0.1
+    };
+    
+    const response = await fetch(CONFIG.DEEPSEEK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || `API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.choices[0].message.content;
+    
+  } catch (error) {
+    console.error('DeepSeek OCR failed:', error);
+    throw error;
+  }
+}
+
+async function performDeepSeekTranslation(text, targetLang, sourceLang = 'auto') {
+  try {
+    const languageNames = {
+      'es': 'Spanish', 'fr': 'French', 'de': 'German', 'zh': 'Chinese (Simplified)',
+      'zh-TW': 'Chinese (Traditional)', 'ja': 'Japanese', 'ko': 'Korean',
+      'ar': 'Arabic', 'hi': 'Hindi', 'ru': 'Russian', 'pt': 'Portuguese',
+      'it': 'Italian', 'tr': 'Turkish', 'nl': 'Dutch', 'pl': 'Polish',
+      'vi': 'Vietnamese', 'th': 'Thai', 'ur': 'Urdu', 'en': 'English'
+    };
+    
+    const targetName = languageNames[targetLang] || targetLang;
+    const sourceName = sourceLang === 'auto' ? 'auto-detect' : (languageNames[sourceLang] || sourceLang);
+    
+    const requestBody = {
+      model: CONFIG.DEEPSEEK_MODEL,
+      messages: [
+        {
+          role: "user",
+          content: `Translate the following text from ${sourceName} to ${targetName}. 
+Preserve the original meaning, tone, and formatting.
+Output ONLY the translation, no explanations, no quotes around the output.
+
+Text to translate:
+${text.substring(0, 4000)}`
+        }
+      ],
+      max_tokens: 4096,
+      temperature: 0.3
+    };
+    
+    const response = await fetch(CONFIG.DEEPSEEK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${CONFIG.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error?.message || `API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    return data.choices[0].message.content;
+    
+  } catch (error) {
+    console.error('DeepSeek translation failed:', error);
+    throw error;
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  OCI FALLBACK FUNCTIONS
+// ═══════════════════════════════════════════════════
+
+async function performOCIOCR(imageBlob) {
+  const formData = new FormData();
+  formData.append('image', imageBlob, 'document.jpg');
+  formData.append('lang', dom.ocrLang.value);
+
+  const response = await fetch(`${CONFIG.BACKEND_URL}/api/ocr`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Server error ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.text || '';
+}
+
+async function performOCITranslation(text, targetLang) {
+  const response = await fetch(`${CONFIG.BACKEND_URL}/api/translate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      text: text.substring(0, 5000),
+      target: targetLang,
+      source: 'en'
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || `Server error ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.translated_text || text;
+}
+
+// ═══════════════════════════════════════════════════
+//  MAIN OCR FUNCTION (DeepSeek + OCI Fallback)
+// ═══════════════════════════════════════════════════
+async function performOCR(imageBlob) {
+  // Try DeepSeek first if API key is configured
+  if (CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_DEEPSEEK_API_KEY_HERE') {
+    try {
+      state.usingDeepSeek = true;
+      const text = await performDeepSeekOCR(imageBlob);
+      return text;
+    } catch (error) {
+      console.warn('DeepSeek OCR failed, falling back to OCI:', error);
+      showToast('DeepSeek unavailable, using backup OCR...', 'info');
+    }
+  }
+  
+  // Fallback to OCI
+  state.usingDeepSeek = false;
+  return await performOCIOCR(imageBlob);
+}
+
+// ═══════════════════════════════════════════════════
+//  MAIN TRANSLATION FUNCTION (DeepSeek + OCI Fallback)
+// ═══════════════════════════════════════════════════
+async function performTranslation(text, targetLang) {
+  // Try DeepSeek first if API key is configured
+  if (CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_DEEPSEEK_API_KEY_HERE') {
+    try {
+      const translated = await performDeepSeekTranslation(text, targetLang);
+      return translated;
+    } catch (error) {
+      console.warn('DeepSeek translation failed, falling back to OCI:', error);
+      showToast('DeepSeek translation unavailable, using backup...', 'info');
+    }
+  }
+  
+  // Fallback to OCI
+  return await performOCITranslation(text, targetLang);
+}
+
+// ═══════════════════════════════════════════════════
+//  IMAGE PREPROCESSING
+// ═══════════════════════════════════════════════════
+async function preprocessImage(source) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = source instanceof Blob ? URL.createObjectURL(source) : URL.createObjectURL(source);
+
+    img.onload = () => {
+      let { width, height } = img;
+      const max = CONFIG.RESIZE_MAX_DIMENSION;
+
+      if (width > max || height > max) {
+        const ratio = Math.min(max / width, max / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+      ctx.filter = 'contrast(1.1) brightness(1.02)';
+      ctx.drawImage(img, 0, 0, width, height);
+
+      URL.revokeObjectURL(url);
+
+      canvas.toBlob(blob => {
+        if (!blob) { reject(new Error('Image compression failed')); return; }
+        resolve(blob);
+      }, 'image/jpeg', CONFIG.JPEG_QUALITY);
+    };
+
+    img.onerror = () => reject(new Error('Image load failed'));
+    img.src = url;
+  });
+}
 
 // ═══════════════════════════════════════════════════
 //  NAVBAR TOGGLE (mobile)
@@ -253,45 +527,6 @@ function stopCamera() {
 }
 
 // ═══════════════════════════════════════════════════
-//  IMAGE PREPROCESSING
-// ═══════════════════════════════════════════════════
-async function preprocessImage(source) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = source instanceof Blob ? URL.createObjectURL(source) : URL.createObjectURL(source);
-
-    img.onload = () => {
-      let { width, height } = img;
-      const max = CONFIG.RESIZE_MAX_DIMENSION;
-
-      if (width > max || height > max) {
-        const ratio = Math.min(max / width, max / height);
-        width = Math.round(width * ratio);
-        height = Math.round(height * ratio);
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-
-      const ctx = canvas.getContext('2d');
-      ctx.filter = 'contrast(1.1) brightness(1.02)';
-      ctx.drawImage(img, 0, 0, width, height);
-
-      URL.revokeObjectURL(url);
-
-      canvas.toBlob(blob => {
-        if (!blob) { reject(new Error('Image compression failed')); return; }
-        resolve(blob);
-      }, 'image/jpeg', CONFIG.JPEG_QUALITY);
-    };
-
-    img.onerror = () => reject(new Error('Image load failed'));
-    img.src = url;
-  });
-}
-
-// ═══════════════════════════════════════════════════
 //  MAIN PROCESS — OCR
 // ═══════════════════════════════════════════════════
 if (dom.processBtn) dom.processBtn.addEventListener('click', runOCR);
@@ -315,6 +550,8 @@ async function runOCR() {
     const processedBlob = await preprocessImage(source);
 
     await animateStep(dom.ps2, 20, 60);
+    
+    showToast('Processing with DeepSeek AI...', 'info');
     const text = await performOCR(processedBlob);
 
     await animateStep(dom.ps3, 60, 85);
@@ -325,7 +562,9 @@ async function runOCR() {
 
     hideProgressArea();
     showResults();
-    showToast('Text extracted successfully!', 'success');
+    
+    const sourceText = state.usingDeepSeek ? 'DeepSeek AI' : 'Standard OCR';
+    showToast(`Text extracted successfully! (${sourceText})`, 'success');
   } catch (err) {
     hideProgressArea();
     showToast(`Error: ${err.message}`, 'error');
@@ -334,25 +573,6 @@ async function runOCR() {
     state.isProcessing = false;
     updateProcessButton();
   }
-}
-
-async function performOCR(imageBlob) {
-  const formData = new FormData();
-  formData.append('image', imageBlob, 'document.jpg');
-  formData.append('lang', dom.ocrLang.value);
-
-  const response = await fetch(`${CONFIG.BACKEND_URL}/api/ocr`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Server error ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.text || '';
 }
 
 // ═══════════════════════════════════════════════════
@@ -372,6 +592,7 @@ async function runTranslate() {
   dom.translateBtn.innerHTML = `<span class="btn-spinner"></span> Translating…`;
 
   try {
+    showToast('Translating with DeepSeek AI...', 'info');
     const translated = await performTranslation(text, targetLang);
     state.translatedText = translated;
 
@@ -387,26 +608,6 @@ async function runTranslate() {
     dom.translateBtn.disabled = false;
     dom.translateBtn.innerHTML = originalText;
   }
-}
-
-async function performTranslation(text, targetLang) {
-    const response = await fetch(`${CONFIG.BACKEND_URL}/api/translate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            text: text.substring(0, 5000),
-            target: targetLang,
-            source: 'en'  // Always use English as source
-        }),
-    });
-
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || `Server error ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data.translated_text || text;
 }
 
 // ═══════════════════════════════════════════════════
@@ -430,15 +631,7 @@ async function downloadDocument() {
   dom.downloadBtn.innerHTML = `<span class="btn-spinner"></span> Generating…`;
 
   try {
-    const response = await fetch(`${CONFIG.BACKEND_URL}/api/generate-docx`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-
-    if (!response.ok) throw new Error(`Server error ${response.status}`);
-
-    const blob = await response.blob();
+    const blob = await generateDocxClientSide(text);
     downloadBlob(blob, 'scandoc_output.docx');
     showToast('Document downloaded!', 'success');
   } catch (err) {
@@ -474,8 +667,8 @@ async function generateDocxClientSide(text) {
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
   <w:body>
-    <w:p><w:r><w:t>ScanDoc — Extracted Document</w:t></w:r></w:p>
-    <w:p><w:r><w:t>Generated on ${new Date().toLocaleString()}</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>ScanDoc — Extracted Document</w:t></w:r></w:p>
+    <w:p><w:r><w:rPr><w:i/><w:sz w:val="20"/></w:rPr><w:t>Generated on ${new Date().toLocaleString()}</w:t></w:r></w:p>
     <w:p/>
     ${paragraphs}
   </w:body>
@@ -513,6 +706,12 @@ function downloadBlob(blob, filename) {
 if (dom.copyBtn) {
   dom.copyBtn.addEventListener('click', () => {
     copyToClipboard(dom.resultsText.value, 'Text copied to clipboard!');
+  });
+}
+
+if (dom.copyTranslatedBtn) {
+  dom.copyTranslatedBtn.addEventListener('click', () => {
+    copyToClipboard(dom.translatedText.textContent, 'Translation copied!');
   });
 }
 
@@ -607,37 +806,7 @@ if (dom.clearResultsBtn) {
 }
 
 // ═══════════════════════════════════════════════════
-//  TOAST NOTIFICATIONS
-// ═══════════════════════════════════════════════════
-let toastTimeout;
-function showToast(message, type = 'success') {
-  if (!dom.toast) return;
-  clearTimeout(toastTimeout);
-  dom.toast.textContent = message;
-  dom.toast.className = `toast show ${type}`;
-  toastTimeout = setTimeout(() => {
-    dom.toast.classList.remove('show');
-  }, 3400);
-}
-
-// ═══════════════════════════════════════════════════
-//  UTILITIES
-// ═══════════════════════════════════════════════════
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-    const script = document.createElement('script');
-    script.src = src;
-    script.onload = resolve;
-    script.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.head.appendChild(script);
-  });
-}
-
-// ═══════════════════════════════════════════════════
-//  INIT
+//  INITIALIZATION
 // ═══════════════════════════════════════════════════
 (function init() {
   if (dom.tabCamera && !navigator.mediaDevices?.getUserMedia) {
@@ -649,10 +818,19 @@ function loadScript(src) {
 
   updateProcessButton();
   
-  console.log('%cScanDoc initialized — Production Mode', 'color:#4CAF50;font-weight:bold;font-size:14px');
-  console.log(`Backend URL: ${CONFIG.BACKEND_URL}`);
+  // Check if DeepSeek API key is configured
+  const hasDeepSeekKey = CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_DEEPSEEK_API_KEY_HERE';
+  
+  console.log('%cScanDoc initialized — DeepSeek AI Mode', 'color:#4CAF50;font-weight:bold;font-size:14px');
+  console.log(`DeepSeek API: ${hasDeepSeekKey ? '✅ Configured' : '❌ Not configured (using OCI fallback)'}`);
+  console.log(`OCI Backend: ${CONFIG.BACKEND_URL}`);
+  
+  if (hasDeepSeekKey) {
+    showToast('✨ ScanDoc ready! Using DeepSeek AI for accurate OCR', 'success');
+  } else {
+    showToast('⚠️ ScanDoc ready! Add DeepSeek API key for better accuracy', 'info');
+  }
 })();
-
 
 // ============================================
 // PWA Installation - One-Click Shortcut
@@ -662,112 +840,70 @@ let deferredPrompt = null;
 const installBtn = document.getElementById('installPwaBtn');
 const mobileInstallBtn = document.getElementById('mobileInstallBtn');
 
-// Listen for the beforeinstallprompt event
 window.addEventListener('beforeinstallprompt', (e) => {
-  // Prevent Chrome 67 and earlier from automatically showing the prompt
   e.preventDefault();
-  
-  // Stash the event so it can be triggered later
   deferredPrompt = e;
-  
-  // Show the install buttons
-  if (installBtn) {
-    installBtn.style.display = 'inline-flex';
-  }
-  if (mobileInstallBtn) {
-    mobileInstallBtn.style.display = 'flex';
-  }
-  
+  if (installBtn) installBtn.style.display = 'inline-flex';
+  if (mobileInstallBtn) mobileInstallBtn.style.display = 'flex';
   console.log('PWA installation is available');
 });
 
-// Handle install button click (desktop)
 if (installBtn) {
   installBtn.addEventListener('click', async () => {
     if (!deferredPrompt) {
-      // If no deferred prompt, maybe the app is already installed or not supported
       showToast('App is already installed or your browser doesn\'t support PWA installation', 'info');
       return;
     }
-    
-    // Show the install prompt
-    deferredPrompt.prompt();
-    
-    // Wait for the user to respond to the prompt
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    console.log(`User response to install prompt: ${outcome}`);
-    
-    // Clear the deferred prompt variable (it can only be used once)
-    deferredPrompt = null;
-    
-    // Hide the install buttons after the prompt is shown
-    if (installBtn) installBtn.style.display = 'none';
-    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-    
-    if (outcome === 'accepted') {
-      showToast('🎉 ScanDoc installed successfully! You can now access it from your home screen.', 'success');
-    } else {
-      showToast('You can install ScanDoc anytime from the browser menu.', 'info');
-    }
-  });
-}
-
-// Handle mobile menu install button
-if (mobileInstallBtn) {
-  mobileInstallBtn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    
-    if (!deferredPrompt) {
-      showToast('Open Chrome/Safari menu and tap "Add to Home Screen" to install ScanDoc', 'info');
-      return;
-    }
-    
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
     deferredPrompt = null;
-    
     if (installBtn) installBtn.style.display = 'none';
     if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-    
     if (outcome === 'accepted') {
       showToast('🎉 ScanDoc installed successfully!', 'success');
     }
   });
 }
 
-// Optional: Show a floating install prompt after page load (gentle nudge)
-let installPromptShown = false;
+if (mobileInstallBtn) {
+  mobileInstallBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!deferredPrompt) {
+      showToast('Open Chrome/Safari menu and tap "Add to Home Screen" to install ScanDoc', 'info');
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    if (installBtn) installBtn.style.display = 'none';
+    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+    if (outcome === 'accepted') {
+      showToast('🎉 ScanDoc installed successfully!', 'success');
+    }
+  });
+}
 
+let installPromptShown = false;
 window.addEventListener('load', () => {
-  // Check if the app is already installed (standalone mode)
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
-                       window.navigator.standalone === true;
-  
-  // If already installed as PWA, hide install buttons permanently
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (isStandalone) {
     if (installBtn) installBtn.style.display = 'none';
     if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
     return;
   }
   
-  // Show a gentle nudge after 3 seconds if installation is available
   setTimeout(() => {
     if (deferredPrompt && !installPromptShown && !isStandalone) {
       installPromptShown = true;
-      
-      // Create a custom toast for install prompt
       const toast = document.getElementById('toast');
       if (toast) {
         toast.textContent = '📱 Install ScanDoc as an app for faster access! Click here.';
         toast.classList.add('show', 'install-prompt');
-        
-        // Make the toast clickable to trigger installation
         toast.onclick = () => {
           toast.classList.remove('show');
           if (deferredPrompt) {
             deferredPrompt.prompt();
-            deferredPrompt.userChoice.then(({ outcome }) => {
+            deferredPrompt.userChoice.then(() => {
               deferredPrompt = null;
               if (installBtn) installBtn.style.display = 'none';
               if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
@@ -775,8 +911,6 @@ window.addEventListener('load', () => {
           }
           toast.onclick = null;
         };
-        
-        // Auto-hide after 8 seconds
         setTimeout(() => {
           toast.classList.remove('show');
           toast.onclick = null;
@@ -786,7 +920,6 @@ window.addEventListener('load', () => {
   }, 3000);
 });
 
-// Listen for app installed event
 window.addEventListener('appinstalled', () => {
   console.log('PWA was installed');
   deferredPrompt = null;
@@ -794,17 +927,3 @@ window.addEventListener('appinstalled', () => {
   if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
   showToast('✅ ScanDoc is now installed on your device!', 'success');
 });
-
-// Helper function for toast notifications (if not already defined)
-function showToast(message, type = 'info') {
-  const toast = document.getElementById('toast');
-  if (!toast) return;
-  
-  toast.textContent = message;
-  toast.className = `toast ${type}`;
-  toast.classList.add('show');
-  
-  setTimeout(() => {
-    toast.classList.remove('show');
-  }, 4000);
-}
