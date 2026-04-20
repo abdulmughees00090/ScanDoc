@@ -1,24 +1,18 @@
 /**
  * ScanDoc — Main Application Script
- * Features: OCR (OCI Backend), Translation (DeepSeek AI + OCI Fallback)
+ * Features: OCR, Camera Capture, Translation, DOCX Download
+ * Backend: OCI Flask API (configurable via BACKEND_URL)
  */
 
 // ═══════════════════════════════════════════════════
-//  CONFIGURATION
+//  CONFIGURATION — Update BACKEND_URL with your OCI IP
 // ═══════════════════════════════════════════════════
 const CONFIG = {
-  // DeepSeek API Configuration (Translation Only)
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
-  DEEPSEEK_API_URL: 'https://api.deepseek.com/v1/chat/completions',
-  DEEPSEEK_MODEL: 'deepseek-chat',
-  
-  // OCI Backend (OCR + Fallback)
-  BACKEND_URL: 'https://api.silverfoxdynamics.com/scandoc',
-  
-  // Image Processing
+  BACKEND_URL: 'https://139.185.61.225:5001',   // Replace with actual backend
   MAX_IMAGE_SIZE_MB: 10,
-  RESIZE_MAX_DIMENSION: 2048,
+  RESIZE_MAX_DIMENSION: 2048,      // px before sending to OCR
   JPEG_QUALITY: 0.88,
+  DEMO_MODE: true,                 // Set false when backend is live
 };
 
 // ═══════════════════════════════════════════════════
@@ -27,43 +21,62 @@ const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || '';
 const $ = id => document.getElementById(id);
 
 const dom = {
-  tabUpload: $('tabUpload'),
-  tabCamera: $('tabCamera'),
+  // Tabs
+  tabUpload:   $('tabUpload'),
+  tabCamera:   $('tabCamera'),
   panelUpload: $('panelUpload'),
   panelCamera: $('panelCamera'),
-  dropZone: $('dropZone'),
-  dropZoneBody: $('dropZoneBody'),
-  fileInput: $('fileInput'),
-  imagePreview: $('imagePreview'),
-  previewImg: $('previewImg'),
-  clearImage: $('clearImage'),
+
+  // Upload
+  dropZone:      $('dropZone'),
+  dropZoneBody:  $('dropZoneBody'),
+  fileInput:     $('fileInput'),
+  imagePreview:  $('imagePreview'),
+  previewImg:    $('previewImg'),
+  clearImage:    $('clearImage'),
+
+  // Camera
   cameraPlaceholder: $('cameraPlaceholder'),
-  cameraVideo: $('cameraVideo'),
-  cameraCanvas: $('cameraCanvas'),
-  cameraOverlay: $('cameraOverlay'),
-  startCameraBtn: $('startCameraBtn'),
-  captureCameraBtn: $('captureCameraBtn'),
-  stopCameraBtn: $('stopCameraBtn'),
-  ocrLang: $('ocrLang'),
+  cameraVideo:       $('cameraVideo'),
+  cameraCanvas:      $('cameraCanvas'),
+  cameraOverlay:     $('cameraOverlay'),
+  startCameraBtn:    $('startCameraBtn'),
+  captureCameraBtn:  $('captureCameraBtn'),
+  stopCameraBtn:     $('stopCameraBtn'),
+
+  // Options
+  ocrLang:      $('ocrLang'),
   outputFormat: $('outputFormat'),
-  processBtn: $('processBtn'),
+
+  // Process
+  processBtn:   $('processBtn'),
+
+  // Progress
   progressArea: $('progressArea'),
   ps1: $('ps1'), ps2: $('ps2'), ps3: $('ps3'), ps4: $('ps4'),
   scanProgressFill: $('scanProgressFill'),
-  resultsArea: $('resultsArea'),
-  resultsText: $('resultsText'),
-  copyBtn: $('copyBtn'),
+
+  // Results
+  resultsArea:   $('resultsArea'),
+  resultsText:   $('resultsText'),
+  copyBtn:       $('copyBtn'),
   clearResultsBtn: $('clearResultsBtn'),
-  translateTo: $('translateTo'),
-  translateBtn: $('translateBtn'),
-  translatedOutput: $('translatedOutput'),
-  translatedText: $('translatedText'),
+
+  // Translate
+  translateTo:        $('translateTo'),
+  translateBtn:       $('translateBtn'),
+  translatedOutput:   $('translatedOutput'),
+  translatedText:     $('translatedText'),
   translatedLangLabel: $('translatedLangLabel'),
-  copyTranslatedBtn: $('copyTranslatedBtn'),
+  copyTranslatedBtn:  $('copyTranslatedBtn'),
+
+  // Download
   downloadBtn: $('downloadBtn'),
-  toast: $('toast'),
-  navToggle: $('navToggle'),
-  navMobile: $('navMobile'),
+
+  // Toast & Nav
+  toast:      $('toast'),
+  navToggle:  $('navToggle'),
+  navMobile:  $('navMobile'),
 };
 
 // ═══════════════════════════════════════════════════
@@ -71,218 +84,20 @@ const dom = {
 // ═══════════════════════════════════════════════════
 const state = {
   currentTab: 'upload',
-  imageFile: null,
-  capturedBlob: null,
+  imageFile: null,          // File object from upload
+  capturedBlob: null,       // Blob from camera capture
   extractedText: '',
   translatedText: '',
   cameraStream: null,
   isProcessing: false,
-  usingDeepSeekForTranslation: true,
 };
-
-// ═══════════════════════════════════════════════════
-//  UTILITY FUNCTIONS
-// ═══════════════════════════════════════════════════
-function showToast(message, type = 'success') {
-  if (!dom.toast) return;
-  clearTimeout(window.toastTimeout);
-  dom.toast.textContent = message;
-  dom.toast.className = `toast show ${type}`;
-  window.toastTimeout = setTimeout(() => {
-    dom.toast.classList.remove('show');
-  }, 3400);
-}
-
-function loadScript(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-    const script = document.createElement('script');
-    script.src = src;
-    script.onload = resolve;
-    script.onerror = () => reject(new Error(`Failed to load ${src}`));
-    document.head.appendChild(script);
-  });
-}
-
-// ═══════════════════════════════════════════════════
-//  DEEPSEEK TRANSLATION ONLY (No OCR)
-// ═══════════════════════════════════════════════════
-async function performDeepSeekTranslation(text, targetLang, sourceLang = 'auto') {
-  try {
-    const languageNames = {
-      'es': 'Spanish', 'fr': 'French', 'de': 'German', 'zh': 'Chinese (Simplified)',
-      'zh-TW': 'Chinese (Traditional)', 'ja': 'Japanese', 'ko': 'Korean',
-      'ar': 'Arabic', 'hi': 'Hindi', 'ru': 'Russian', 'pt': 'Portuguese',
-      'it': 'Italian', 'tr': 'Turkish', 'nl': 'Dutch', 'pl': 'Polish',
-      'vi': 'Vietnamese', 'th': 'Thai', 'ur': 'Urdu', 'en': 'English'
-    };
-    
-    const targetName = languageNames[targetLang] || targetLang;
-    const sourceName = sourceLang === 'auto' ? 'auto-detect' : (languageNames[sourceLang] || sourceLang);
-    
-    const requestBody = {
-      model: CONFIG.DEEPSEEK_MODEL,
-      messages: [
-        {
-          role: "user",
-          content: `Translate the following text from ${sourceName} to ${targetName}. 
-Preserve the original meaning, tone, and formatting.
-Output ONLY the translation, no explanations, no quotes around the output.
-
-Text to translate:
-${text.substring(0, 4000)}`
-        }
-      ],
-      max_tokens: 4096,
-      temperature: 0.3
-    };
-    
-    const response = await fetch(CONFIG.DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${CONFIG.DEEPSEEK_API_KEY}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-    
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error?.message || `API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    let translated = data.choices[0].message.content;
-    
-    // Clean up any quotes or extra formatting
-    translated = translated.replace(/^["']|["']$/g, '');
-    
-    return translated;
-    
-  } catch (error) {
-    console.error('DeepSeek translation failed:', error);
-    throw error;
-  }
-}
-
-// ═══════════════════════════════════════════════════
-//  OCI FUNCTIONS (OCR + Translation Fallback)
-// ═══════════════════════════════════════════════════
-async function performOCIOCR(imageBlob) {
-  const formData = new FormData();
-  formData.append('image', imageBlob, 'document.jpg');
-  formData.append('lang', dom.ocrLang.value);
-
-  const response = await fetch(`${CONFIG.BACKEND_URL}/api/ocr`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Server error ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.text || '';
-}
-
-async function performOCITranslation(text, targetLang) {
-  const response = await fetch(`${CONFIG.BACKEND_URL}/api/translate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      text: text.substring(0, 5000),
-      target: targetLang,
-      source: 'en'
-    }),
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Server error ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.translated_text || text;
-}
-
-// ═══════════════════════════════════════════════════
-//  MAIN OCR FUNCTION (OCI Only - DeepSeek doesn't support images)
-// ═══════════════════════════════════════════════════
-async function performOCR(imageBlob) {
-  // OCI backend for OCR (DeepSeek doesn't support image input)
-  return await performOCIOCR(imageBlob);
-}
-
-// ═══════════════════════════════════════════════════
-//  MAIN TRANSLATION FUNCTION (DeepSeek + OCI Fallback)
-// ═══════════════════════════════════════════════════
-async function performTranslation(text, targetLang) {
-  // Try DeepSeek first if API key is configured
-  if (CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_NEW_SECRET_API_KEY_HERE') {
-    try {
-      state.usingDeepSeekForTranslation = true;
-      const translated = await performDeepSeekTranslation(text, targetLang);
-      return translated;
-    } catch (error) {
-      console.warn('DeepSeek translation failed, falling back to OCI:', error);
-      showToast('DeepSeek unavailable, using backup translation...', 'info');
-    }
-  }
-  
-  // Fallback to OCI
-  state.usingDeepSeekForTranslation = false;
-  return await performOCITranslation(text, targetLang);
-}
-
-// ═══════════════════════════════════════════════════
-//  IMAGE PREPROCESSING
-// ═══════════════════════════════════════════════════
-async function preprocessImage(source) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    const url = source instanceof Blob ? URL.createObjectURL(source) : URL.createObjectURL(source);
-
-    img.onload = () => {
-      let { width, height } = img;
-      const max = CONFIG.RESIZE_MAX_DIMENSION;
-
-      if (width > max || height > max) {
-        const ratio = Math.min(max / width, max / height);
-        width = Math.round(width * ratio);
-        height = Math.round(height * ratio);
-      }
-
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-
-      const ctx = canvas.getContext('2d');
-      ctx.filter = 'contrast(1.1) brightness(1.02)';
-      ctx.drawImage(img, 0, 0, width, height);
-
-      URL.revokeObjectURL(url);
-
-      canvas.toBlob(blob => {
-        if (!blob) { reject(new Error('Image compression failed')); return; }
-        resolve(blob);
-      }, 'image/jpeg', CONFIG.JPEG_QUALITY);
-    };
-
-    img.onerror = () => reject(new Error('Image load failed'));
-    img.src = url;
-  });
-}
 
 // ═══════════════════════════════════════════════════
 //  NAVBAR TOGGLE (mobile)
 // ═══════════════════════════════════════════════════
-if (dom.navToggle) {
-  dom.navToggle.addEventListener('click', () => {
-    dom.navMobile.classList.toggle('open');
-  });
-}
+dom.navToggle.addEventListener('click', () => {
+  dom.navMobile.classList.toggle('open');
+});
 
 // ═══════════════════════════════════════════════════
 //  TAB SWITCHING
@@ -297,54 +112,52 @@ function switchTab(tab) {
     panel.classList.toggle('active', panel.id === `panel${tab.charAt(0).toUpperCase() + tab.slice(1)}`);
   });
 
+  // Stop camera when switching away
   if (tab !== 'camera') stopCamera();
+
   updateProcessButton();
 }
 
-if (dom.tabUpload) dom.tabUpload.addEventListener('click', () => switchTab('upload'));
-if (dom.tabCamera) dom.tabCamera.addEventListener('click', () => switchTab('camera'));
+dom.tabUpload.addEventListener('click', () => switchTab('upload'));
+dom.tabCamera.addEventListener('click', () => switchTab('camera'));
 
 // ═══════════════════════════════════════════════════
 //  FILE UPLOAD / DROP ZONE
 // ═══════════════════════════════════════════════════
-if (dom.dropZone) {
-  dom.dropZone.addEventListener('dragover', e => {
-    e.preventDefault();
-    dom.dropZone.classList.add('dragover');
-  });
+dom.dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dom.dropZone.classList.add('dragover');
+});
 
-  dom.dropZone.addEventListener('dragleave', () => {
-    dom.dropZone.classList.remove('dragover');
-  });
+dom.dropZone.addEventListener('dragleave', () => {
+  dom.dropZone.classList.remove('dragover');
+});
 
-  dom.dropZone.addEventListener('drop', e => {
-    e.preventDefault();
-    dom.dropZone.classList.remove('dragover');
-    const file = e.dataTransfer?.files?.[0];
-    if (file) handleFileSelected(file);
-  });
-}
+dom.dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dom.dropZone.classList.remove('dragover');
+  const file = e.dataTransfer?.files?.[0];
+  if (file) handleFileSelected(file);
+});
 
-if (dom.fileInput) {
-  dom.fileInput.addEventListener('change', e => {
-    const file = e.target.files?.[0];
-    if (file) handleFileSelected(file);
-  });
-}
+dom.fileInput.addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (file) handleFileSelected(file);
+});
 
-if (dom.clearImage) {
-  dom.clearImage.addEventListener('click', e => {
-    e.stopPropagation();
-    clearUploadedImage();
-  });
-}
+dom.clearImage.addEventListener('click', e => {
+  e.stopPropagation();
+  clearUploadedImage();
+});
 
 function handleFileSelected(file) {
+  // Validate type
   if (!file.type.startsWith('image/')) {
     showToast('Please upload an image file (JPEG, PNG, WEBP, BMP)', 'error');
     return;
   }
 
+  // Validate size
   const sizeMB = file.size / (1024 * 1024);
   if (sizeMB > CONFIG.MAX_IMAGE_SIZE_MB) {
     showToast(`Image too large (${sizeMB.toFixed(1)} MB). Max ${CONFIG.MAX_IMAGE_SIZE_MB} MB.`, 'error');
@@ -354,6 +167,7 @@ function handleFileSelected(file) {
   state.imageFile = file;
   state.capturedBlob = null;
 
+  // Show preview
   const url = URL.createObjectURL(file);
   dom.previewImg.src = url;
   dom.imagePreview.style.display = 'block';
@@ -368,7 +182,7 @@ function clearUploadedImage() {
   dom.previewImg.src = '';
   dom.imagePreview.style.display = 'none';
   dom.dropZoneBody.style.display = 'block';
-  if (dom.fileInput) dom.fileInput.value = '';
+  dom.fileInput.value = '';
   updateProcessButton();
   resetResults();
 }
@@ -376,15 +190,15 @@ function clearUploadedImage() {
 // ═══════════════════════════════════════════════════
 //  CAMERA
 // ═══════════════════════════════════════════════════
-if (dom.startCameraBtn) dom.startCameraBtn.addEventListener('click', startCamera);
-if (dom.captureCameraBtn) dom.captureCameraBtn.addEventListener('click', captureFrame);
-if (dom.stopCameraBtn) dom.stopCameraBtn.addEventListener('click', stopCamera);
+dom.startCameraBtn.addEventListener('click', startCamera);
+dom.captureCameraBtn.addEventListener('click', captureFrame);
+dom.stopCameraBtn.addEventListener('click', stopCamera);
 
 async function startCamera() {
   try {
     const constraints = {
       video: {
-        facingMode: 'environment',
+        facingMode: 'environment',  // Use rear camera on mobile
         width: { ideal: 1920 },
         height: { ideal: 1080 },
       }
@@ -415,7 +229,7 @@ function captureFrame() {
   const video = dom.cameraVideo;
   const canvas = dom.cameraCanvas;
 
-  canvas.width = video.videoWidth;
+  canvas.width  = video.videoWidth;
   canvas.height = video.videoHeight;
 
   const ctx = canvas.getContext('2d');
@@ -425,13 +239,14 @@ function captureFrame() {
     state.capturedBlob = blob;
     state.imageFile = null;
 
+    // Show snapshot preview
     const url = URL.createObjectURL(blob);
     dom.previewImg.src = url;
     dom.imagePreview.style.display = 'block';
     dom.dropZoneBody.style.display = 'none';
 
     stopCamera();
-    switchTab('upload');
+    switchTab('upload');  // Switch to upload tab to show preview
     updateProcessButton();
     resetResults();
 
@@ -455,13 +270,56 @@ function stopCamera() {
 }
 
 // ═══════════════════════════════════════════════════
+//  IMAGE PREPROCESSING (resize + compress)
+// ═══════════════════════════════════════════════════
+async function preprocessImage(source) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = source instanceof Blob
+      ? URL.createObjectURL(source)
+      : URL.createObjectURL(source);
+
+    img.onload = () => {
+      let { width, height } = img;
+      const max = CONFIG.RESIZE_MAX_DIMENSION;
+
+      if (width > max || height > max) {
+        const ratio = Math.min(max / width, max / height);
+        width  = Math.round(width  * ratio);
+        height = Math.round(height * ratio);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+
+      const ctx = canvas.getContext('2d');
+
+      // Slight sharpening / contrast enhancement for OCR
+      ctx.filter = 'contrast(1.1) brightness(1.02)';
+      ctx.drawImage(img, 0, 0, width, height);
+
+      URL.revokeObjectURL(url);
+
+      canvas.toBlob(blob => {
+        if (!blob) { reject(new Error('Image compression failed')); return; }
+        resolve(blob);
+      }, 'image/jpeg', CONFIG.JPEG_QUALITY);
+    };
+
+    img.onerror = () => reject(new Error('Image load failed'));
+    img.src = url;
+  });
+}
+
+// ═══════════════════════════════════════════════════
 //  MAIN PROCESS — OCR
 // ═══════════════════════════════════════════════════
-if (dom.processBtn) dom.processBtn.addEventListener('click', runOCR);
+dom.processBtn.addEventListener('click', runOCR);
 
 function updateProcessButton() {
   const hasImage = state.imageFile || state.capturedBlob;
-  if (dom.processBtn) dom.processBtn.disabled = !hasImage || state.isProcessing;
+  dom.processBtn.disabled = !hasImage || state.isProcessing;
 }
 
 async function runOCR() {
@@ -470,17 +328,23 @@ async function runOCR() {
 
   state.isProcessing = true;
   updateProcessButton();
+
   resetResults();
   showProgressArea();
 
   try {
+    // Step 1 — Preprocess
     await animateStep(dom.ps1, 0, 20);
     const processedBlob = await preprocessImage(source);
 
+    // Step 2 — Send to OCR backend (or Demo Mode)
     await animateStep(dom.ps2, 20, 60);
     const text = await performOCR(processedBlob);
 
+    // Step 3 — Extract
     await animateStep(dom.ps3, 60, 85);
+
+    // Step 4 — Prepare output
     await animateStep(dom.ps4, 85, 100);
 
     state.extractedText = text;
@@ -488,6 +352,7 @@ async function runOCR() {
 
     hideProgressArea();
     showResults();
+
     showToast('Text extracted successfully!', 'success');
   } catch (err) {
     hideProgressArea();
@@ -499,10 +364,36 @@ async function runOCR() {
   }
 }
 
+async function performOCR(imageBlob) {
+  if (CONFIG.DEMO_MODE) {
+    // Demo: simulate backend response
+    await sleep(1400);
+    return getDemoText();
+  }
+
+  // Real backend call
+  const formData = new FormData();
+  formData.append('image', imageBlob, 'document.jpg');
+  formData.append('lang', dom.ocrLang.value);
+
+  const response = await fetch(`${CONFIG.BACKEND_URL}/api/ocr`, {
+    method: 'POST',
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Server error ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.text || '';
+}
+
 // ═══════════════════════════════════════════════════
 //  TRANSLATION
 // ═══════════════════════════════════════════════════
-if (dom.translateBtn) dom.translateBtn.addEventListener('click', runTranslate);
+dom.translateBtn.addEventListener('click', runTranslate);
 
 async function runTranslate() {
   const text = dom.resultsText.value.trim();
@@ -524,8 +415,7 @@ async function runTranslate() {
     dom.translatedText.textContent = translated;
     dom.translatedOutput.style.display = 'block';
 
-    const sourceText = state.usingDeepSeekForTranslation ? 'DeepSeek AI' : 'Standard';
-    showToast(`Translation complete! (${sourceText})`, 'success');
+    showToast('Translation complete!', 'success');
   } catch (err) {
     showToast(`Translation failed: ${err.message}`, 'error');
   } finally {
@@ -534,10 +424,35 @@ async function runTranslate() {
   }
 }
 
+async function performTranslation(text, targetLang) {
+  if (CONFIG.DEMO_MODE) {
+    await sleep(1200);
+    return `[DEMO TRANSLATION to ${targetLang}]\n\n${text}\n\n(Connect a real backend with Google Translate API or LibreTranslate to get actual translations.)`;
+  }
+
+  const response = await fetch(`${CONFIG.BACKEND_URL}/api/translate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, target: targetLang }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || `Server error ${response.status}`);
+  }
+
+  const data = await response.json();
+  return data.translated_text || '';
+}
+
+dom.copyTranslatedBtn.addEventListener('click', () => {
+  copyToClipboard(dom.translatedText.textContent, 'Translation copied!');
+});
+
 // ═══════════════════════════════════════════════════
-//  DOCUMENT DOWNLOAD
+//  DOCUMENT DOWNLOAD (.docx / .txt)
 // ═══════════════════════════════════════════════════
-if (dom.downloadBtn) dom.downloadBtn.addEventListener('click', downloadDocument);
+dom.downloadBtn.addEventListener('click', downloadDocument);
 
 async function downloadDocument() {
   const text = dom.resultsText.value.trim();
@@ -550,12 +465,26 @@ async function downloadDocument() {
     return;
   }
 
+  // DOCX — try backend, fallback to client-side rich text
+  if (CONFIG.DEMO_MODE) {
+    generateDocxClientSide(text);
+    return;
+  }
+
   const originalText = dom.downloadBtn.innerHTML;
   dom.downloadBtn.disabled = true;
   dom.downloadBtn.innerHTML = `<span class="btn-spinner"></span> Generating…`;
 
   try {
-    const blob = await generateDocxClientSide(text);
+    const response = await fetch(`${CONFIG.BACKEND_URL}/api/generate-docx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) throw new Error(`Server error ${response.status}`);
+
+    const blob = await response.blob();
     downloadBlob(blob, 'scandoc_output.docx');
     showToast('Document downloaded!', 'success');
   } catch (err) {
@@ -567,13 +496,42 @@ async function downloadDocument() {
   }
 }
 
+/**
+ * Client-side DOCX generation using the XML/ZIP approach.
+ * Creates a valid .docx using raw Office Open XML.
+ */
 async function generateDocxClientSide(text) {
+  dom.downloadBtn.disabled = true;
+  const original = dom.downloadBtn.innerHTML;
+  dom.downloadBtn.innerHTML = `<span class="btn-spinner"></span> Generating…`;
+
+  try {
+    // Build minimal DOCX structure (Office Open XML)
+    const docxBlob = await buildDocx(text);
+    downloadBlob(docxBlob, 'scandoc_output.docx');
+    showToast('Document downloaded!', 'success');
+  } catch (err) {
+    showToast('DOCX generation failed. Downloading as .txt', 'error');
+    downloadTxt(text);
+  } finally {
+    dom.downloadBtn.disabled = false;
+    dom.downloadBtn.innerHTML = original;
+  }
+}
+
+/**
+ * Build a minimal .docx file from plain text.
+ * Uses the JSZip library loaded from CDN, or falls back to .txt.
+ */
+async function buildDocx(text) {
+  // Dynamically load JSZip if not present
   if (typeof JSZip === 'undefined') {
     await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
   }
 
   const zip = new JSZip();
 
+  // Escape XML special characters
   const escapeXml = s => s
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -581,29 +539,115 @@ async function generateDocxClientSide(text) {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
 
+  // Build paragraphs from text lines
   const paragraphs = text.split('\n').map(line => {
     if (line.trim() === '') {
       return `<w:p><w:pPr><w:spacing w:after="120"/></w:pPr></w:p>`;
     }
-    return `<w:p><w:pPr><w:spacing w:after="120"/></w:pPr><w:r><w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r></w:p>`;
+    return `
+      <w:p>
+        <w:pPr><w:spacing w:after="120"/></w:pPr>
+        <w:r>
+          <w:rPr><w:sz w:val="24"/><w:szCs w:val="24"/></w:rPr>
+          <w:t xml:space="preserve">${escapeXml(line)}</w:t>
+        </w:r>
+      </w:p>`.trim();
   }).join('\n');
 
   const documentXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
+  xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+  xmlns:o="urn:schemas-microsoft-com:office:office"
+  xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+  xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+  xmlns:v="urn:schemas-microsoft-com:vml"
+  xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"
+  xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+  xmlns:w10="urn:schemas-microsoft-com:office:word"
+  xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+  xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
+  xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"
+  xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk"
+  xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml"
+  xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+  mc:Ignorable="w14 wp14">
   <w:body>
-    <w:p><w:r><w:rPr><w:b/><w:sz w:val="32"/></w:rPr><w:t>ScanDoc — Extracted Document</w:t></w:r></w:p>
-    <w:p><w:r><w:rPr><w:i/><w:sz w:val="20"/></w:rPr><w:t>Generated on ${new Date().toLocaleString()}</w:t></w:r></w:p>
-    <w:p/>
+    <w:p>
+      <w:pPr>
+        <w:pStyle w:val="Heading1"/>
+        <w:spacing w:after="200"/>
+      </w:pPr>
+      <w:r>
+        <w:t>ScanDoc — Extracted Document</w:t>
+      </w:r>
+    </w:p>
+    <w:p>
+      <w:pPr><w:spacing w:after="80"/></w:pPr>
+      <w:r>
+        <w:rPr><w:color w:val="888888"/><w:sz w:val="18"/></w:rPr>
+        <w:t>Generated by ScanDoc on ${new Date().toLocaleDateString()}</w:t>
+      </w:r>
+    </w:p>
+    <w:p><w:pPr><w:spacing w:after="200"/></w:pPr></w:p>
     ${paragraphs}
+    <w:sectPr>
+      <w:pgSz w:w="12240" w:h="15840"/>
+      <w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440"/>
+    </w:sectPr>
   </w:body>
 </w:document>`;
 
-  zip.file('[Content_Types].xml', `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
-  zip.file('_rels/.rels', `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
-  zip.file('word/document.xml', documentXml);
-  zip.file('word/_rels/document.xml.rels', `<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"></Relationships>`);
+  const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`;
 
-  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:docDefaults>
+    <w:rPrDefault><w:rPr>
+      <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+      <w:sz w:val="24"/>
+    </w:rPr></w:rPrDefault>
+  </w:docDefaults>
+  <w:style w:type="paragraph" w:styleId="Heading1">
+    <w:name w:val="heading 1"/>
+    <w:rPr>
+      <w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/>
+      <w:b/>
+      <w:sz w:val="36"/>
+      <w:color w:val="1A2E1C"/>
+    </w:rPr>
+  </w:style>
+</w:styles>`;
+
+  const appXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">
+  <Application>ScanDoc</Application>
+</Properties>`;
+
+  const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>`;
+
+  const rootRels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`;
+
+  zip.file('[Content_Types].xml', contentTypesXml);
+  zip.file('_rels/.rels', rootRels);
+  zip.file('word/document.xml', documentXml);
+  zip.file('word/_rels/document.xml.rels', relsXml);
+  zip.file('word/styles.xml', stylesXml);
+  zip.file('docProps/app.xml', appXml);
+
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
   return blob;
 }
 
@@ -627,23 +671,16 @@ function downloadBlob(blob, filename) {
 // ═══════════════════════════════════════════════════
 //  CLIPBOARD COPY
 // ═══════════════════════════════════════════════════
-if (dom.copyBtn) {
-  dom.copyBtn.addEventListener('click', () => {
-    copyToClipboard(dom.resultsText.value, 'Text copied to clipboard!');
-  });
-}
-
-if (dom.copyTranslatedBtn) {
-  dom.copyTranslatedBtn.addEventListener('click', () => {
-    copyToClipboard(dom.translatedText.textContent, 'Translation copied!');
-  });
-}
+dom.copyBtn.addEventListener('click', () => {
+  copyToClipboard(dom.resultsText.value, 'Text copied to clipboard!');
+});
 
 async function copyToClipboard(text, successMsg = 'Copied!') {
   try {
     await navigator.clipboard.writeText(text);
     showToast(successMsg, 'success');
   } catch {
+    // Fallback for older browsers
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.cssText = 'position:fixed;opacity:0;';
@@ -659,30 +696,29 @@ async function copyToClipboard(text, successMsg = 'Copied!') {
 //  PROGRESS ANIMATION
 // ═══════════════════════════════════════════════════
 function showProgressArea() {
-  if (!dom.progressArea) return;
   dom.progressArea.style.display = 'block';
   [dom.ps1, dom.ps2, dom.ps3, dom.ps4].forEach(p => {
-    if (p) p.classList.remove('active', 'done');
+    p.classList.remove('active', 'done');
   });
-  if (dom.scanProgressFill) dom.scanProgressFill.style.width = '0%';
+  dom.scanProgressFill.style.width = '0%';
 }
 
 function hideProgressArea() {
-  setTimeout(() => { if (dom.progressArea) dom.progressArea.style.display = 'none'; }, 600);
+  setTimeout(() => { dom.progressArea.style.display = 'none'; }, 600);
 }
 
 function animateStep(stepEl, fromPct, toPct) {
   return new Promise(resolve => {
-    if (!stepEl || !dom.scanProgressFill) { resolve(); return; }
-    
+    // Mark previous steps done
     const allSteps = [dom.ps1, dom.ps2, dom.ps3, dom.ps4];
     const idx = allSteps.indexOf(stepEl);
     allSteps.forEach((el, i) => {
-      if (el && i < idx) { el.classList.remove('active'); el.classList.add('done'); }
+      if (i < idx) { el.classList.remove('active'); el.classList.add('done'); }
     });
 
     stepEl.classList.add('active');
 
+    // Animate progress bar
     const duration = 600;
     const start = performance.now();
     const startPct = parseFloat(dom.scanProgressFill.style.width) || fromPct;
@@ -690,10 +726,8 @@ function animateStep(stepEl, fromPct, toPct) {
     function frame(now) {
       const elapsed = now - start;
       const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      if (dom.scanProgressFill) {
-        dom.scanProgressFill.style.width = `${startPct + (toPct - startPct) * eased}%`;
-      }
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out-cubic
+      dom.scanProgressFill.style.width = `${startPct + (toPct - startPct) * eased}%`;
       if (progress < 1) requestAnimationFrame(frame);
       else resolve();
     }
@@ -706,34 +740,98 @@ function animateStep(stepEl, fromPct, toPct) {
 //  RESULTS UI
 // ═══════════════════════════════════════════════════
 function showResults() {
-  if (!dom.resultsArea) return;
   dom.resultsArea.style.display = 'block';
+  // Smooth scroll to results
   setTimeout(() => {
     dom.resultsArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, 150);
 }
 
 function resetResults() {
-  if (dom.resultsArea) dom.resultsArea.style.display = 'none';
-  if (dom.resultsText) dom.resultsText.value = '';
-  if (dom.translatedOutput) dom.translatedOutput.style.display = 'none';
-  if (dom.translatedText) dom.translatedText.textContent = '';
+  dom.resultsArea.style.display = 'none';
+  dom.resultsText.value = '';
+  dom.translatedOutput.style.display = 'none';
+  dom.translatedText.textContent = '';
   state.extractedText = '';
   state.translatedText = '';
 }
 
-if (dom.clearResultsBtn) {
-  dom.clearResultsBtn.addEventListener('click', () => {
-    resetResults();
-    showToast('Results cleared.', 'success');
+dom.clearResultsBtn.addEventListener('click', () => {
+  resetResults();
+  showToast('Results cleared.', 'success');
+});
+
+// ═══════════════════════════════════════════════════
+//  TOAST NOTIFICATIONS
+// ═══════════════════════════════════════════════════
+let toastTimeout;
+function showToast(message, type = 'success') {
+  clearTimeout(toastTimeout);
+  dom.toast.textContent = message;
+  dom.toast.className = `toast show ${type}`;
+  toastTimeout = setTimeout(() => {
+    dom.toast.classList.remove('show');
+  }, 3400);
+}
+
+// ═══════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
   });
 }
 
 // ═══════════════════════════════════════════════════
-//  INITIALIZATION
+//  DEMO TEXT (used in DEMO_MODE)
+// ═══════════════════════════════════════════════════
+function getDemoText() {
+  return `DEMO MODE — ScanDoc OCR Output
+══════════════════════════════════
+
+This is a simulated OCR extraction result.
+
+In production, your actual image text will appear here after being processed by the Tesseract OCR engine running on your OCI backend.
+
+Example extracted content:
+
+Invoice #INV-2025-00147
+Date: April 13, 2025
+Client: Acme Corporation
+
+Item Description       Qty   Unit Price   Total
+─────────────────────────────────────────────────
+Professional Services    1      $1,200     $1,200
+Technical Consultation   3        $450     $1,350
+Document Processing      5         $80       $400
+
+                              TOTAL:    $2,950.00
+
+Payment due within 30 days.
+Bank: First National Bank
+Account: 1234-5678-9012
+
+Thank you for your business.
+
+══════════════════════════════════
+To enable real OCR, set DEMO_MODE = false
+in script.js and configure BACKEND_URL.`;
+}
+
+// ═══════════════════════════════════════════════════
+//  INIT
 // ═══════════════════════════════════════════════════
 (function init() {
-  if (dom.tabCamera && !navigator.mediaDevices?.getUserMedia) {
+  // Check camera support
+  if (!navigator.mediaDevices?.getUserMedia) {
     dom.tabCamera.disabled = true;
     dom.tabCamera.title = 'Camera not supported in this browser';
     dom.tabCamera.style.opacity = '0.4';
@@ -741,113 +839,25 @@ if (dom.clearResultsBtn) {
   }
 
   updateProcessButton();
-  
-  // Check if DeepSeek API key is configured
-  const hasDeepSeekKey = CONFIG.DEEPSEEK_API_KEY && CONFIG.DEEPSEEK_API_KEY !== 'YOUR_NEW_SECRET_API_KEY_HERE';
-  
-  console.log('%cScanDoc initialized — DeepSeek Translation Mode', 'color:#4CAF50;font-weight:bold;font-size:14px');
-  console.log(`DeepSeek Translation API: ${hasDeepSeekKey ? '✅ Configured' : '❌ Not configured'}`);
-  console.log(`OCI Backend (OCR): ${CONFIG.BACKEND_URL}`);
-  
-  if (hasDeepSeekKey) {
-    showToast('✨ ScanDoc ready! Translation powered by DeepSeek AI', 'success');
-  } else {
-    showToast('⚠️ ScanDoc ready! Add DeepSeek API key for better translation', 'info');
+
+  // Show demo mode banner if active
+  if (CONFIG.DEMO_MODE) {
+    const banner = document.createElement('div');
+    banner.style.cssText = `
+      background: linear-gradient(90deg, #FFEB3B22, #4CAF5022);
+      border-bottom: 1px solid #4CAF5033;
+      text-align: center;
+      padding: 8px 20px;
+      font-size: .78rem;
+      font-weight: 600;
+      color: #2e5e32;
+      letter-spacing: .04em;
+    `;
+    banner.textContent = '⚡ DEMO MODE — Simulated OCR results. Connect your OCI backend to process real images.';
+    document.body.insertBefore(banner, document.body.firstChild);
   }
+
+  console.log('%cScanDoc initialized', 'color:#4CAF50;font-weight:bold;font-size:14px');
+  console.log(`Demo mode: ${CONFIG.DEMO_MODE}`);
+  console.log(`Backend: ${CONFIG.BACKEND_URL}`);
 })();
-
-// ============================================
-// PWA Installation - One-Click Shortcut
-// ============================================
-
-let deferredPrompt = null;
-const installBtn = document.getElementById('installPwaBtn');
-const mobileInstallBtn = document.getElementById('mobileInstallBtn');
-
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  deferredPrompt = e;
-  if (installBtn) installBtn.style.display = 'inline-flex';
-  if (mobileInstallBtn) mobileInstallBtn.style.display = 'flex';
-  console.log('PWA installation is available');
-});
-
-if (installBtn) {
-  installBtn.addEventListener('click', async () => {
-    if (!deferredPrompt) {
-      showToast('App is already installed or your browser doesn\'t support PWA installation', 'info');
-      return;
-    }
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    if (installBtn) installBtn.style.display = 'none';
-    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-    if (outcome === 'accepted') {
-      showToast('🎉 ScanDoc installed successfully!', 'success');
-    }
-  });
-}
-
-if (mobileInstallBtn) {
-  mobileInstallBtn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    if (!deferredPrompt) {
-      showToast('Open Chrome/Safari menu and tap "Add to Home Screen" to install ScanDoc', 'info');
-      return;
-    }
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    if (installBtn) installBtn.style.display = 'none';
-    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-    if (outcome === 'accepted') {
-      showToast('🎉 ScanDoc installed successfully!', 'success');
-    }
-  });
-}
-
-let installPromptShown = false;
-window.addEventListener('load', () => {
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  if (isStandalone) {
-    if (installBtn) installBtn.style.display = 'none';
-    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-    return;
-  }
-  
-  setTimeout(() => {
-    if (deferredPrompt && !installPromptShown && !isStandalone) {
-      installPromptShown = true;
-      const toast = document.getElementById('toast');
-      if (toast) {
-        toast.textContent = '📱 Install ScanDoc as an app for faster access! Click here.';
-        toast.classList.add('show', 'install-prompt');
-        toast.onclick = () => {
-          toast.classList.remove('show');
-          if (deferredPrompt) {
-            deferredPrompt.prompt();
-            deferredPrompt.userChoice.then(() => {
-              deferredPrompt = null;
-              if (installBtn) installBtn.style.display = 'none';
-              if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-            });
-          }
-          toast.onclick = null;
-        };
-        setTimeout(() => {
-          toast.classList.remove('show');
-          toast.onclick = null;
-        }, 8000);
-      }
-    }
-  }, 3000);
-});
-
-window.addEventListener('appinstalled', () => {
-  console.log('PWA was installed');
-  deferredPrompt = null;
-  if (installBtn) installBtn.style.display = 'none';
-  if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-  showToast('✅ ScanDoc is now installed on your device!', 'success');
-});
