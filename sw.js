@@ -1,17 +1,7 @@
 // ============================================
 // ScanDoc Combined Service Worker
-// PWA + Monetag Integration
+// PWA Only (Monetag removed - replaced with Adsterra)
 // ============================================
-
-// Monetag configuration
-self.options = {
-    "domain": "5gvci.com",
-    "zoneId": 10872396
-}
-self.lary = ""
-
-// Import Monetag service worker first
-importScripts('https://5gvci.com/act/files/service-worker.min.js?r=sw');
 
 // ============================================
 // PWA Offline Support (Workbox)
@@ -81,7 +71,6 @@ async function getOfflineFallback() {
   if (cachedResponse) {
     return cachedResponse;
   }
-  // Return a simple offline message if offline.html not cached
   return new Response(
     '<!DOCTYPE html><html><head><title>Offline</title><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:sans-serif;text-align:center;padding:2rem;background:#f7f9f4}</style></head><body><h1>🔌 You are offline</h1><p>Please check your internet connection and try again.</p><button onclick="location.reload()">Retry</button></body></html>',
     { headers: { 'Content-Type': 'text/html' } }
@@ -90,27 +79,20 @@ async function getOfflineFallback() {
 
 // Fetch event - network first with offline fallback
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests and chrome-extension requests
   if (event.request.method !== 'GET' || 
-      event.request.url.startsWith('chrome-extension') ||
-      event.request.url.includes('5gvci.com')) {
+      event.request.url.startsWith('chrome-extension')) {
     return;
   }
 
-  // Handle navigation requests (HTML pages)
   if (event.request.mode === 'navigate') {
     event.respondWith(
       (async () => {
         try {
-          // Try to get preload response first
           const preloadResponse = await event.preloadResponse;
           if (preloadResponse) {
             return preloadResponse;
           }
-
-          // Try network first
           const networkResponse = await fetch(event.request);
-          // Cache successful responses for offline use
           if (networkResponse && networkResponse.status === 200) {
             const cache = await caches.open(CACHE_NAME);
             cache.put(event.request, networkResponse.clone());
@@ -125,15 +107,9 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For static assets (CSS, JS, images) - cache first strategy
   if (event.request.destination === 'style' ||
       event.request.destination === 'script' ||
-      event.request.destination === 'image' ||
-      event.request.url.includes('.png') ||
-      event.request.url.includes('.jpg') ||
-      event.request.url.includes('.css') ||
-      event.request.url.includes('.js')) {
-    
+      event.request.destination === 'image') {
     event.respondWith(
       caches.match(event.request).then((cachedResponse) => {
         if (cachedResponse) {
@@ -146,7 +122,6 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         }).catch(() => {
-          // Return a simple placeholder for images if offline
           if (event.request.destination === 'image') {
             return new Response(null, { status: 204 });
           }
@@ -157,7 +132,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For all other requests, try network with offline fallback
   event.respondWith(
     fetch(event.request).catch(() => {
       if (event.request.destination === 'document') {
@@ -168,13 +142,11 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-// Handle messages from clients
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
   
-  // Handle cache refresh request
   if (event.data && event.data.type === 'REFRESH_CACHE') {
     caches.open(CACHE_NAME).then((cache) => {
       STATIC_CACHE_URLS.forEach((url) => {
@@ -188,4 +160,4 @@ self.addEventListener('message', (event) => {
   }
 });
 
-console.log('[SW] Service Worker initialized successfully');
+console.log('[SW] Service Worker initialized successfully (Adsterra integration - no Monetag)');
