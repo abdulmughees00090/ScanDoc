@@ -9,7 +9,7 @@
 //  CONFIGURATION — UPDATE THIS WITH YOUR BACKEND URL
 // ═══════════════════════════════════════════════════
 const CONFIG = {
-  BACKEND_URL: 'https://api.silverfoxdynamics.com:5001',  // Add the port!
+  BACKEND_URL: 'https://api.silverfoxdynamics.com',  // No port needed
   // OR if using direct IP:
   // BACKEND_URL: 'http://139.185.61.225:5001',
   MAX_IMAGE_SIZE_MB: 10,
