@@ -2,6 +2,7 @@
  * ScanDoc — Main Application Script
  * Features: OCR, Camera Capture, Translation, DOCX Download
  * Backend: OCI Flask API
+ * Ad Integration: Adsterra (SmartLink on Extract Text button)
  */
 
 // ═══════════════════════════════════════════════════
@@ -13,6 +14,15 @@ const CONFIG = {
   RESIZE_MAX_DIMENSION: 2048,
   JPEG_QUALITY: 0.88,
   DEMO_MODE: false,
+};
+
+// ═══════════════════════════════════════════════════
+//  ADSTERRA CONFIGURATION
+// ═══════════════════════════════════════════════════
+const ADSTERRA = {
+  SMART_LINK_URL: 'https://walkingdrunkard.com/i36defv5rp?key=59117978654aca970efc37dd853580d2',
+  adShownThisSession: false,
+  pendingOCRCallback: null
 };
 
 // ═══════════════════════════════════════════════════
@@ -292,9 +302,75 @@ async function preprocessImage(source) {
 }
 
 // ═══════════════════════════════════════════════════
-//  MAIN PROCESS — OCR
+//  ADSTERRA SMARTLINK - Show ad before OCR
 // ═══════════════════════════════════════════════════
-if (dom.processBtn) dom.processBtn.addEventListener('click', runOCR);
+async function showAdsterraSmartLink() {
+  return new Promise((resolve) => {
+    // If ad already shown this session, resolve immediately
+    if (ADSTERRA.adShownThisSession) {
+      resolve(true);
+      return;
+    }
+
+    try {
+      // Open SmartLink in new tab
+      const adWindow = window.open(ADSTERRA.SMART_LINK_URL, '_blank');
+      
+      if (adWindow) {
+        showToast('📢 Please check the new tab, then return to continue OCR', 'info');
+        
+        // Wait for user to return to the page
+        const onFocus = () => {
+          window.removeEventListener('focus', onFocus);
+          ADSTERRA.adShownThisSession = true;
+          showToast('✅ Thanks! Continuing with text extraction...', 'success');
+          resolve(true);
+        };
+        
+        window.addEventListener('focus', onFocus, { once: true });
+        
+        // Fallback timeout (8 seconds) in case focus event doesn't fire
+        setTimeout(() => {
+          if (!ADSTERRA.adShownThisSession) {
+            window.removeEventListener('focus', onFocus);
+            ADSTERRA.adShownThisSession = true;
+            resolve(true);
+          }
+        }, 8000);
+      } else {
+        // Popup blocked - just continue
+        console.warn('Adsterra popup blocked, continuing without ad');
+        ADSTERRA.adShownThisSession = true;
+        resolve(false);
+      }
+    } catch (err) {
+      console.error('Adsterra error:', err);
+      ADSTERRA.adShownThisSession = true;
+      resolve(false);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  MAIN PROCESS — OCR (with Adsterra integration)
+// ═══════════════════════════════════════════════════
+if (dom.processBtn) {
+  dom.processBtn.addEventListener('click', async () => {
+    const source = state.imageFile || state.capturedBlob;
+    if (!source) {
+      showToast('Please select or capture an image first', 'error');
+      return;
+    }
+    
+    if (state.isProcessing) return;
+    
+    // Show Adsterra SmartLink before processing (only first time per session)
+    await showAdsterraSmartLink();
+    
+    // Proceed with OCR
+    runOCR();
+  });
+}
 
 function updateProcessButton() {
   const hasImage = state.imageFile || state.capturedBlob;
@@ -396,7 +472,7 @@ async function performTranslation(text, targetLang) {
         body: JSON.stringify({ 
             text: text.substring(0, 5000),
             target: targetLang,
-            source: 'en'  // Always use English as source
+            source: 'en'
         }),
     });
 
@@ -513,6 +589,12 @@ function downloadBlob(blob, filename) {
 if (dom.copyBtn) {
   dom.copyBtn.addEventListener('click', () => {
     copyToClipboard(dom.resultsText.value, 'Text copied to clipboard!');
+  });
+}
+
+if (dom.copyTranslatedBtn) {
+  dom.copyTranslatedBtn.addEventListener('click', () => {
+    copyToClipboard(dom.translatedText.textContent, 'Translation copied!');
   });
 }
 
@@ -637,6 +719,72 @@ function loadScript(src) {
 }
 
 // ═══════════════════════════════════════════════════
+//  PWA INSTALLATION
+// ═══════════════════════════════════════════════════
+let deferredPrompt = null;
+const installBtn = document.getElementById('installPwaBtn');
+const mobileInstallBtn = document.getElementById('mobileInstallBtn');
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  if (installBtn) installBtn.style.display = 'inline-flex';
+  if (mobileInstallBtn) mobileInstallBtn.style.display = 'flex';
+  console.log('PWA installation is available');
+});
+
+if (installBtn) {
+  installBtn.addEventListener('click', async () => {
+    if (!deferredPrompt) {
+      showToast('App is already installed or your browser doesn\'t support PWA installation', 'info');
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    if (installBtn) installBtn.style.display = 'none';
+    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+    if (outcome === 'accepted') {
+      showToast('🎉 ScanDoc installed successfully!', 'success');
+    }
+  });
+}
+
+if (mobileInstallBtn) {
+  mobileInstallBtn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    if (!deferredPrompt) {
+      showToast('Open Chrome/Safari menu and tap "Add to Home Screen" to install ScanDoc', 'info');
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+    if (installBtn) installBtn.style.display = 'none';
+    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+    if (outcome === 'accepted') {
+      showToast('🎉 ScanDoc installed successfully!', 'success');
+    }
+  });
+}
+
+window.addEventListener('load', () => {
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (isStandalone) {
+    if (installBtn) installBtn.style.display = 'none';
+    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+  }
+});
+
+window.addEventListener('appinstalled', () => {
+  console.log('PWA was installed');
+  deferredPrompt = null;
+  if (installBtn) installBtn.style.display = 'none';
+  if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
+  showToast('✅ ScanDoc is now installed on your device!', 'success');
+});
+
+// ═══════════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════════
 (function init() {
@@ -649,162 +797,7 @@ function loadScript(src) {
 
   updateProcessButton();
   
-  console.log('%cScanDoc initialized — Production Mode', 'color:#4CAF50;font-weight:bold;font-size:14px');
+  console.log('%cScanDoc initialized — Adsterra Integration Active ✅', 'color:#4CAF50;font-weight:bold;font-size:14px');
   console.log(`Backend URL: ${CONFIG.BACKEND_URL}`);
+  console.log('Adsterra SmartLink will trigger on first Extract Text click');
 })();
-
-
-// ============================================
-// PWA Installation - One-Click Shortcut
-// ============================================
-
-let deferredPrompt = null;
-const installBtn = document.getElementById('installPwaBtn');
-const mobileInstallBtn = document.getElementById('mobileInstallBtn');
-
-// Listen for the beforeinstallprompt event
-window.addEventListener('beforeinstallprompt', (e) => {
-  // Prevent Chrome 67 and earlier from automatically showing the prompt
-  e.preventDefault();
-  
-  // Stash the event so it can be triggered later
-  deferredPrompt = e;
-  
-  // Show the install buttons
-  if (installBtn) {
-    installBtn.style.display = 'inline-flex';
-  }
-  if (mobileInstallBtn) {
-    mobileInstallBtn.style.display = 'flex';
-  }
-  
-  console.log('PWA installation is available');
-});
-
-// Handle install button click (desktop)
-if (installBtn) {
-  installBtn.addEventListener('click', async () => {
-    if (!deferredPrompt) {
-      // If no deferred prompt, maybe the app is already installed or not supported
-      showToast('App is already installed or your browser doesn\'t support PWA installation', 'info');
-      return;
-    }
-    
-    // Show the install prompt
-    deferredPrompt.prompt();
-    
-    // Wait for the user to respond to the prompt
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    console.log(`User response to install prompt: ${outcome}`);
-    
-    // Clear the deferred prompt variable (it can only be used once)
-    deferredPrompt = null;
-    
-    // Hide the install buttons after the prompt is shown
-    if (installBtn) installBtn.style.display = 'none';
-    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-    
-    if (outcome === 'accepted') {
-      showToast('🎉 ScanDoc installed successfully! You can now access it from your home screen.', 'success');
-    } else {
-      showToast('You can install ScanDoc anytime from the browser menu.', 'info');
-    }
-  });
-}
-
-// Handle mobile menu install button
-if (mobileInstallBtn) {
-  mobileInstallBtn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    
-    if (!deferredPrompt) {
-      showToast('Open Chrome/Safari menu and tap "Add to Home Screen" to install ScanDoc', 'info');
-      return;
-    }
-    
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    
-    if (installBtn) installBtn.style.display = 'none';
-    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-    
-    if (outcome === 'accepted') {
-      showToast('🎉 ScanDoc installed successfully!', 'success');
-    }
-  });
-}
-
-// Optional: Show a floating install prompt after page load (gentle nudge)
-let installPromptShown = false;
-
-window.addEventListener('load', () => {
-  // Check if the app is already installed (standalone mode)
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || 
-                       window.navigator.standalone === true;
-  
-  // If already installed as PWA, hide install buttons permanently
-  if (isStandalone) {
-    if (installBtn) installBtn.style.display = 'none';
-    if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-    return;
-  }
-  
-  // Show a gentle nudge after 3 seconds if installation is available
-  setTimeout(() => {
-    if (deferredPrompt && !installPromptShown && !isStandalone) {
-      installPromptShown = true;
-      
-      // Create a custom toast for install prompt
-      const toast = document.getElementById('toast');
-      if (toast) {
-        toast.textContent = '📱 Install ScanDoc as an app for faster access! Click here.';
-        toast.classList.add('show', 'install-prompt');
-        
-        // Make the toast clickable to trigger installation
-        toast.onclick = () => {
-          toast.classList.remove('show');
-          if (deferredPrompt) {
-            deferredPrompt.prompt();
-            deferredPrompt.userChoice.then(({ outcome }) => {
-              deferredPrompt = null;
-              if (installBtn) installBtn.style.display = 'none';
-              if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-            });
-          }
-          toast.onclick = null;
-        };
-        
-        // Auto-hide after 8 seconds
-        setTimeout(() => {
-          toast.classList.remove('show');
-          toast.onclick = null;
-        }, 8000);
-      }
-    }
-  }, 3000);
-});
-
-// Listen for app installed event
-window.addEventListener('appinstalled', () => {
-  console.log('PWA was installed');
-  deferredPrompt = null;
-  if (installBtn) installBtn.style.display = 'none';
-  if (mobileInstallBtn) mobileInstallBtn.style.display = 'none';
-  showToast('✅ ScanDoc is now installed on your device!', 'success');
-});
-
-// Helper function for toast notifications (if not already defined)
-function showToast(message, type = 'info') {
-  const toast = document.getElementById('toast');
-  if (!toast) return;
-  
-  toast.textContent = message;
-  toast.className = `toast ${type}`;
-  toast.classList.add('show');
-  
-  setTimeout(() => {
-    toast.classList.remove('show');
-  }, 4000);
-}
