@@ -9,13 +9,32 @@
 //  CONFIGURATION — UPDATE THIS WITH YOUR BACKEND URL
 // ═══════════════════════════════════════════════════
 const CONFIG = {
-  // Use api.silverfoxdynamics.com with /scandoc prefix
+  // Legacy backend, still used for translation/DOCX until those are migrated too.
   BACKEND_URL: 'https://api.silverfoxdynamics.com/scandoc',
   MAX_IMAGE_SIZE_MB: 10,
   RESIZE_MAX_DIMENSION: 2048,
   JPEG_QUALITY: 0.88,
   DEMO_MODE: false,
 };
+
+// ═══════════════════════════════════════════════════
+//  OCR ENGINE (Tesseract.js — runs entirely in-browser)
+// ═══════════════════════════════════════════════════
+// Workers are cached per language combo so re-running OCR with the same
+// language doesn't re-download/re-init the WASM engine + traineddata.
+const ocrWorkers = {};
+
+async function getOcrWorker(langs) {
+  if (ocrWorkers[langs]) return ocrWorkers[langs];
+  if (typeof Tesseract === 'undefined') {
+    throw new Error('OCR engine failed to load. Check your internet connection and reload the page.');
+  }
+  const worker = await Tesseract.createWorker(langs, 1, {
+    logger: m => onOcrProgress(m),
+  });
+  ocrWorkers[langs] = worker;
+  return worker;
+}
 
 // ═══════════════════════════════════════════════════
 //  ADSTERRA CONFIGURATION
@@ -50,6 +69,7 @@ const dom = {
   captureCameraBtn: $('captureCameraBtn'),
   stopCameraBtn: $('stopCameraBtn'),
   ocrLang: $('ocrLang'),
+  ocrLang2: $('ocrLang2'),
   outputFormat: $('outputFormat'),
   processBtn: $('processBtn'),
   progressArea: $('progressArea'),
@@ -378,6 +398,21 @@ function updateProcessButton() {
   if (dom.processBtn) dom.processBtn.disabled = !hasImage || state.isProcessing;
 }
 
+let ocrProgressPct = 0;
+function onOcrProgress(m) {
+  // Tesseract.js reports several phases; 'recognizing text' is the bulk of the work.
+  if (!dom.scanProgressFill) return;
+  let pct = 20; // baseline after preprocessing
+  if (m.status === 'loading tesseract core' || m.status === 'initializing tesseract') pct = 25;
+  else if (m.status === 'loading language traineddata' || m.status === 'initialized tesseract') pct = 30;
+  else if (m.status === 'recognizing text') pct = 30 + Math.round((m.progress || 0) * 55); // 30 → 85
+  ocrProgressPct = Math.max(ocrProgressPct, pct);
+  dom.scanProgressFill.style.width = `${ocrProgressPct}%`;
+  if (m.status === 'recognizing text' && dom.ps2) {
+    dom.ps2.classList.add('active');
+  }
+}
+
 async function runOCR() {
   const source = state.imageFile || state.capturedBlob;
   if (!source) return;
@@ -386,16 +421,21 @@ async function runOCR() {
   updateProcessButton();
   resetResults();
   showProgressArea();
+  ocrProgressPct = 0;
 
   try {
     await animateStep(dom.ps1, 0, 20);
     const processedBlob = await preprocessImage(source);
 
-    await animateStep(dom.ps2, 20, 60);
+    dom.ps2 && dom.ps2.classList.add('active');
     const text = await performOCR(processedBlob);
 
-    await animateStep(dom.ps3, 60, 85);
-    await animateStep(dom.ps4, 85, 100);
+    await animateStep(dom.ps3, 85, 92);
+    await animateStep(dom.ps4, 92, 100);
+
+    if (!text || !text.trim()) {
+      throw new Error('No readable text was found in this image. Try a clearer photo or a different source language.');
+    }
 
     state.extractedText = text;
     dom.resultsText.value = text;
@@ -414,22 +454,24 @@ async function runOCR() {
 }
 
 async function performOCR(imageBlob) {
-  const formData = new FormData();
-  formData.append('image', imageBlob, 'document.jpg');
-  formData.append('lang', dom.ocrLang.value);
+  const primary = dom.ocrLang?.value || 'eng';
+  const secondary = dom.ocrLang2?.value || '';
+  const langs = secondary && secondary !== primary ? `${primary}+${secondary}` : primary;
 
-  const response = await fetch(`${CONFIG.BACKEND_URL}/api/ocr`, {
-    method: 'POST',
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || `Server error ${response.status}`);
+  let worker;
+  try {
+    worker = await getOcrWorker(langs);
+  } catch (err) {
+    throw new Error(err.message || 'Could not start the OCR engine.');
   }
 
-  const data = await response.json();
-  return data.text || '';
+  try {
+    const { data } = await worker.recognize(imageBlob);
+    return (data?.text || '').trim();
+  } catch (err) {
+    console.error('Tesseract recognition error:', err);
+    throw new Error('OCR failed to process this image. It may be corrupted or in an unsupported format.');
+  }
 }
 
 // ═══════════════════════════════════════════════════
@@ -798,7 +840,5 @@ window.addEventListener('appinstalled', () => {
 
   updateProcessButton();
   
-  console.log('%cScanDoc initialized — Adsterra Integration Active ✅', 'color:#4CAF50;font-weight:bold;font-size:14px');
-  console.log(`Backend URL: ${CONFIG.BACKEND_URL}`);
-  console.log('Adsterra SmartLink will trigger on first Extract Text click');
+  console.log('%cScanDoc initialized — OCR runs 100% in-browser via Tesseract.js ✅', 'color:#4CAF50;font-weight:bold;font-size:14px');
 })();

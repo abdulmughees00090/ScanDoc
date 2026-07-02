@@ -69,6 +69,9 @@
   
   <!-- Stylesheets -->
   <link rel="stylesheet" href="style.css" />
+
+  <!-- Tesseract.js — in-browser OCR engine (WASM, no server required) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
   
   <!-- Adsterra SmartLink (global) - opens in new tab on click -->
   <script>
@@ -288,7 +291,47 @@
 
           <!-- Options Row -->
           <div class="options-row">
-            <div class="option-group"><label for="ocrLang">Source Language</label><select id="ocrLang"><option value="eng">Auto-detect / English</option><option value="ara">Arabic</option><option value="chi_sim">Chinese (Simplified)</option><option value="fra">French</option><option value="deu">German</option><option value="hin">Hindi</option><option value="spa">Spanish</option><option value="rus">Russian</option></select></div>
+            <div class="option-group"><label for="ocrLang">Source Language</label><select id="ocrLang">
+              <option value="eng">English</option>
+              <option value="ara">Arabic</option>
+              <option value="urd">Urdu</option>
+              <option value="fas">Persian (Farsi)</option>
+              <option value="hin">Hindi</option>
+              <option value="pan">Punjabi</option>
+              <option value="ben">Bengali</option>
+              <option value="tam">Tamil</option>
+              <option value="tel">Telugu</option>
+              <option value="chi_sim">Chinese (Simplified)</option>
+              <option value="chi_tra">Chinese (Traditional)</option>
+              <option value="jpn">Japanese</option>
+              <option value="kor">Korean</option>
+              <option value="rus">Russian</option>
+              <option value="fra">French</option>
+              <option value="deu">German</option>
+              <option value="spa">Spanish</option>
+              <option value="por">Portuguese</option>
+              <option value="ita">Italian</option>
+              <option value="tur">Turkish</option>
+              <option value="ind">Indonesian</option>
+              <option value="tha">Thai</option>
+              <option value="vie">Vietnamese</option>
+              <option value="nld">Dutch</option>
+              <option value="pol">Polish</option>
+              <option value="ukr">Ukrainian</option>
+              <option value="ell">Greek</option>
+              <option value="heb">Hebrew</option>
+            </select></div>
+            <div class="option-group"><label for="ocrLang2">Also detect (optional)</label><select id="ocrLang2">
+              <option value="">— None —</option>
+              <option value="eng">English</option>
+              <option value="ara">Arabic</option>
+              <option value="urd">Urdu</option>
+              <option value="fas">Persian (Farsi)</option>
+              <option value="hin">Hindi</option>
+              <option value="chi_sim">Chinese (Simplified)</option>
+              <option value="fra">French</option>
+              <option value="spa">Spanish</option>
+            </select></div>
             <div class="option-group"><label for="outputFormat">Output Format</label><select id="outputFormat"><option value="docx">Word Document (.docx)</option><option value="txt">Plain Text (.txt)</option></select></div>
           </div>
 
@@ -349,88 +392,6 @@
 
   <div class="toast" id="toast"></div>
 
-  <script>
-    // ==================== ADSTERRA SMARTLINK INTEGRATION ON EXTRACT BUTTON ====================
-    // Override runOCR to show ad first (SmartLink opens new tab) then continue OCR
-    const originalRunOCR = window.runOCR; // will be defined later, but we'll patch after load
-    let adPendingResolve = null;
-    let adTriggered = false;
-
-    function triggerAdsterraSmartLink() {
-      return new Promise((resolve) => {
-        if (adTriggered) { resolve(); return; }
-        // Open SmartLink in a new tab
-        const smartUrl = window.adsterraSmartLink || "https://walkingdrunkard.com/i36defv5rp?key=59117978654aca970efc37dd853580d2";
-        const newTab = window.open(smartUrl, '_blank');
-        // After user returns (focus), resolve after short delay to allow ad to load.
-        const onFocus = () => {
-          window.removeEventListener('focus', onFocus);
-          setTimeout(() => {
-            adTriggered = true;
-            resolve();
-          }, 300);
-        };
-        if (newTab) {
-          window.addEventListener('focus', onFocus, { once: true });
-          // fallback: resolve after 2 seconds in case focus not captured
-          setTimeout(() => {
-            window.removeEventListener('focus', onFocus);
-            if (!adTriggered) { adTriggered = true; resolve(); }
-          }, 2500);
-        } else {
-          // popup blocked? still resolve
-          adTriggered = true;
-          resolve();
-        }
-      });
-    }
-
-    // Wait for DOM and attach modified handler dynamically
-    document.addEventListener('DOMContentLoaded', function() {
-      const processBtn = document.getElementById('processBtn');
-      if (processBtn) {
-        const originalClickHandler = processBtn.onclick;
-        // Override to include ad trigger
-        const newProcessHandler = async (e) => {
-          e.preventDefault();
-          if (state && state.isProcessing) return;
-          // Trigger Adsterra SmartLink first (new tab)
-          try {
-            await triggerAdsterraSmartLink();
-          } catch(err) { console.warn("Ad trigger issue", err); }
-          // Proceed to original OCR logic
-          if (typeof runOCR === 'function') {
-            runOCR();
-          } else {
-            console.warn("runOCR not ready");
-          }
-        };
-        processBtn.onclick = newProcessHandler;
-      }
-    });
-  </script>
-
   <script src="script.js"></script>
-  <script>
-    // Additional patch to ensure CONFIG and state are available and ad integration final
-    if (typeof CONFIG !== 'undefined') {
-      CONFIG.BACKEND_URL = 'https://api.silverfoxdynamics.com/scandoc';
-    }
-    // Ensure that after script loads we also re-bind process button if runOCR is redefined.
-    window.addEventListener('load', function() {
-      const btn = document.getElementById('processBtn');
-      if (btn && !btn.hasAttribute('data-ad-integrated')) {
-        const oldListener = btn.onclick;
-        btn.setAttribute('data-ad-integrated', 'true');
-        btn.onclick = async (e) => {
-          e.preventDefault();
-          if (state && state.isProcessing) return;
-          await triggerAdsterraSmartLink();
-          if (typeof runOCR === 'function') runOCR();
-          else if (oldListener) oldListener(e);
-        };
-      }
-    });
-  </script>
 </body>
 </html>
