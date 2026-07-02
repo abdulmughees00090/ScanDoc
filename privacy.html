@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <!-- Google Analytics -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-9GDW4LM8QN"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-9GDW4LM8QN');
+  </script>
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Privacy Policy – ScanDoc</title>
+
+  <meta name="description" content="ScanDoc's privacy policy: what data we do and don't collect, how OCR and document processing run in your browser, and your rights." />
+  <meta name="robots" content="index, follow" />
+  <link rel="canonical" href="https://scandoc.silverfoxdynamics.com/privacy.html" />
+
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#4caf50" />
+  <link rel="apple-touch-icon" href="/icons/launchericon-192x192.png" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="48x48" href="/icons/launchericon-48x48.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/launchericon-192x192.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;14..32,500;14..32,600;14..32,700;14..32,800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ══════════ NAVBAR ══════════ -->
+  <header class="navbar">
+    <div class="navbar__inner">
+      <a class="navbar__brand" href="index.html">
+        <div class="navbar__logo">
+          <img src="logo.png" alt="ScanDoc Logo" width="32" height="32" style="display: block; object-fit: contain;" />
+        </div>
+        <span class="navbar__name">ScanDoc</span>
+      </a>
+      <nav class="navbar__links">
+        <a href="index.html#features">Features</a>
+        <a href="index.html#how-it-works">How It Works</a>
+        <a href="index.html#app" class="btn btn--nav">Start Converting</a>
+      </nav>
+      <button class="navbar__toggle" id="navToggle" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+    <div class="navbar__mobile" id="navMobile">
+      <a href="index.html#features">Features</a>
+      <a href="index.html#how-it-works">How It Works</a>
+      <a href="index.html#app">Start Converting</a>
+    </div>
+  </header>
+
+  <!-- ══════════ CONTENT ══════════ -->
+  <main class="legal-page">
+    <h1>Privacy Policy</h1>
+    <p class="legal-updated">Last updated: July 2026</p>
+
+    <p>ScanDoc is built to process your documents without sending your files to a server. This page explains exactly what that means in practice, and where the few exceptions are.</p>
+
+    <h2>What happens to your images and PDFs</h2>
+    <p>Text extraction (OCR), image-to-PDF, text-to-PDF, PDF-to-image, and PDF-to-text conversion all run locally in your browser using JavaScript/WebAssembly libraries (Tesseract.js, PDF.js, jsPDF). Your images and documents are never uploaded to ScanDoc's servers, because ScanDoc does not operate a processing server — there isn't one to upload to. Files stay on your device and are cleared from memory when you close the tab or clear your results.</p>
+
+    <h2>The one feature that does contact a server: Translation</h2>
+    <p>When you use the "Translate Extracted Text" feature, the text you choose to translate is sent to a third-party free translation API (MyMemory Translated) so it can return a translation. This is the only feature in ScanDoc that transmits any of your content off your device. If you don't use translation, nothing is sent anywhere. MyMemory's own privacy practices are outside ScanDoc's control — see <a class="legal-link" href="https://mymemory.translated.net/doc/privacy.php" target="_blank" rel="noopener">MyMemory's privacy policy</a> for details on how they handle submitted text.</p>
+
+    <h2>Analytics</h2>
+    <p>ScanDoc uses Google Analytics to understand aggregate traffic (e.g. how many people visit, which pages are popular). This collects standard analytics data such as your browser, approximate location, and pages viewed — it does not have access to the images, PDFs, or text you process. See <a class="legal-link" href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's Privacy Policy</a> for details.</p>
+
+    <h2>Advertising</h2>
+    <p>ScanDoc is free to use and is supported by ads served through Adsterra. Ad networks may use cookies or similar technologies to serve and measure ads; they do not have access to the content you process with ScanDoc's tools.</p>
+
+    <h2>Cookies and local storage</h2>
+    <p>ScanDoc may use your browser's local storage or cache to speed up repeat visits (for example, caching the OCR engine files so they don't re-download every time) and to support offline/PWA functionality. This data stays on your device.</p>
+
+    <h2>Children's privacy</h2>
+    <p>ScanDoc is a general-audience utility and does not knowingly collect personal information from children.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>If this policy changes, we'll update the date at the top of this page.</p>
+
+    <h2>Contact</h2>
+    <p>Questions about this policy can be raised through the contact details on the ScanDoc website.</p>
+  </main>
+
+  <!-- ══════════ FOOTER ══════════ -->
+  <footer class="footer">
+    <div class="container footer__inner">
+      <div class="footer__brand"><div class="navbar__logo" style="width:28px;height:28px;"><img src="logo.png" alt="ScanDoc Logo" width="28" height="28" /></div><span>ScanDoc</span></div>
+      <p class="footer__copy">© 2025 ScanDoc. Free & open for everyone. No data stored.</p>
+      <div class="footer__links"><a href="privacy.html">Privacy</a><a href="terms.html">Terms</a></div>
+    </div>
+  </footer>
+
+  <script>
+    const navToggle = document.getElementById('navToggle');
+    const navMobile = document.getElementById('navMobile');
+    if (navToggle) navToggle.addEventListener('click', () => navMobile.classList.toggle('open'));
+  </script>
+</body>
+</html>
