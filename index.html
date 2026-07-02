@@ -72,6 +72,13 @@
 
   <!-- Tesseract.js — in-browser OCR engine (WASM, no server required) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+
+  <!-- PDF.js — read/render PDFs in-browser (Mozilla) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.js"></script>
+  <!-- jsPDF — generate PDFs in-browser -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <!-- JSZip — bundle multi-page PDF→image output into a single download -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   
   <!-- Adsterra SmartLink (global) - opens in new tab on click -->
   <script>
@@ -263,6 +270,10 @@
           <div class="tab-bar">
             <button class="tab-btn active" data-tab="upload" id="tabUpload"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 2v10M5 6l4-4 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M2 14h14" stroke="currentColor" stroke-width="1.7"/></svg> Upload Image</button>
             <button class="tab-btn" data-tab="camera" id="tabCamera"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="5" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.7"/><circle cx="9" cy="10" r="2.5" stroke="currentColor"/><path d="M6 5V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1" stroke="currentColor"/></svg> Camera Scan</button>
+            <button class="tab-btn" data-tab="img2pdf" id="tabImg2pdf">Image → PDF</button>
+            <button class="tab-btn" data-tab="txt2pdf" id="tabTxt2pdf">Text → PDF</button>
+            <button class="tab-btn" data-tab="pdf2img" id="tabPdf2img">PDF → Images</button>
+            <button class="tab-btn" data-tab="pdf2txt" id="tabPdf2txt">PDF → Text</button>
           </div>
 
           <!-- Upload Tab -->
@@ -289,6 +300,77 @@
             <div class="camera-controls"><button class="btn btn--primary" id="startCameraBtn">Start Camera</button><button class="btn btn--secondary" id="captureCameraBtn" disabled>Capture Frame</button><button class="btn btn--ghost" id="stopCameraBtn" style="display:none;">Stop</button></div>
           </div>
 
+          <!-- ══ Image → PDF Tab ══ -->
+          <div class="tab-panel" id="panelImg2pdf">
+            <div class="drop-zone" id="i2pDropZone">
+              <input type="file" id="i2pFileInput" accept="image/*" multiple class="drop-zone__input" />
+              <div class="drop-zone__body" id="i2pDropZoneBody">
+                <div class="drop-zone__icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="8" y="10" width="32" height="28" rx="4" stroke="#4CAF50" stroke-width="2"/><path d="M24 20v10M19 25l5-6 5 6" stroke="#4CAF50" stroke-width="2.2"/></svg></div>
+                <p class="drop-zone__title">Drop images here</p>
+                <p class="drop-zone__sub">or <span class="link-style">click to browse</span> — select multiple images, JPEG/PNG/WEBP</p>
+              </div>
+            </div>
+            <div class="i2p-list" id="i2pList"></div>
+            <div class="options-row">
+              <div class="option-group"><label for="i2pPageSize">Page Size</label><select id="i2pPageSize"><option value="a4">A4</option><option value="letter">Letter</option><option value="original">Original Image Size</option></select></div>
+              <div class="option-group"><label for="i2pMargin">Margin</label><select id="i2pMargin"><option value="0">None</option><option value="20" selected>Normal</option><option value="40">Wide</option></select></div>
+              <div class="option-group"><label for="i2pQuality">Image Quality</label><select id="i2pQuality"><option value="0.7">Standard (smaller file)</option><option value="0.9" selected>High</option><option value="1">Maximum</option></select></div>
+            </div>
+            <div class="process-row"><button class="btn btn--primary btn--lg btn--full" id="i2pGenerateBtn" disabled>Generate PDF</button></div>
+          </div>
+
+          <!-- ══ Text → PDF Tab ══ -->
+          <div class="tab-panel" id="panelTxt2pdf">
+            <textarea class="results-text" id="t2pText" style="min-height:220px;" placeholder="Paste or type your text here…"></textarea>
+            <div class="options-row">
+              <div class="option-group"><label for="t2pFont">Font</label><select id="t2pFont"><option value="helvetica">Helvetica (Sans)</option><option value="times">Times (Serif)</option><option value="courier">Courier (Monospace)</option></select></div>
+              <div class="option-group"><label for="t2pSize">Font Size</label><select id="t2pSize"><option value="10">10pt</option><option value="12" selected>12pt</option><option value="14">14pt</option><option value="16">16pt</option></select></div>
+              <div class="option-group"><label for="t2pAlign">Alignment</label><select id="t2pAlign"><option value="left" selected>Left</option><option value="justify">Justify</option><option value="center">Center</option></select></div>
+              <div class="option-group"><label for="t2pMargin">Margins</label><select id="t2pMargin"><option value="15">Narrow</option><option value="25" selected>Normal</option><option value="35">Wide</option></select></div>
+            </div>
+            <p class="drop-zone__sub" style="margin: 0 0 12px;">Note: non-Latin scripts (Arabic, Chinese, Hindi, etc.) currently render using the browser's default PDF font support and may not display correctly — Latin-script text (English, French, Spanish, German…) is fully supported.</p>
+            <div class="process-row"><button class="btn btn--primary btn--lg btn--full" id="t2pGenerateBtn">Generate PDF</button></div>
+          </div>
+
+          <!-- ══ PDF → Images Tab ══ -->
+          <div class="tab-panel" id="panelPdf2img">
+            <div class="drop-zone" id="p2iDropZone">
+              <input type="file" id="p2iFileInput" accept="application/pdf" class="drop-zone__input" />
+              <div class="drop-zone__body" id="p2iDropZoneBody">
+                <div class="drop-zone__icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="8" y="10" width="32" height="28" rx="4" stroke="#4CAF50" stroke-width="2"/></svg></div>
+                <p class="drop-zone__title">Drop a PDF here</p>
+                <p class="drop-zone__sub">or <span class="link-style">click to browse</span></p>
+              </div>
+              <p class="drop-zone__sub" id="p2iFileName" style="display:none;"></p>
+            </div>
+            <div class="options-row">
+              <div class="option-group"><label for="p2iFormat">Image Format</label><select id="p2iFormat"><option value="png">PNG</option><option value="jpeg">JPG</option><option value="webp">WEBP</option></select></div>
+              <div class="option-group"><label for="p2iScale">Resolution</label><select id="p2iScale"><option value="1">Standard (1x)</option><option value="2" selected>High (2x)</option><option value="3">Maximum (3x)</option></select></div>
+              <div class="option-group"><label for="p2iPages">Pages</label><input type="text" id="p2iPages" placeholder="All, or e.g. 1-3,5" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--radius-md);font-size:.9rem;" /></div>
+            </div>
+            <div class="process-row"><button class="btn btn--primary btn--lg btn--full" id="p2iConvertBtn" disabled>Convert to Images</button></div>
+            <div class="progress-area" id="p2iProgressArea" style="display:none;"><div class="scan-progress-bar"><div class="scan-progress-fill" id="p2iProgressFill"></div></div></div>
+            <div class="i2p-list" id="p2iResults"></div>
+          </div>
+
+          <!-- ══ PDF → Text Tab ══ -->
+          <div class="tab-panel" id="panelPdf2txt">
+            <div class="drop-zone" id="p2tDropZone">
+              <input type="file" id="p2tFileInput" accept="application/pdf" class="drop-zone__input" />
+              <div class="drop-zone__body" id="p2tDropZoneBody">
+                <div class="drop-zone__icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><rect x="8" y="10" width="32" height="28" rx="4" stroke="#4CAF50" stroke-width="2"/></svg></div>
+                <p class="drop-zone__title">Drop a PDF here</p>
+                <p class="drop-zone__sub">or <span class="link-style">click to browse</span> — searchable or scanned PDFs both work (scanned pages are OCR'd automatically)</p>
+              </div>
+              <p class="drop-zone__sub" id="p2tFileName" style="display:none;"></p>
+            </div>
+            <div class="process-row"><button class="btn btn--primary btn--lg btn--full" id="p2tExtractBtn" disabled>Extract Text</button></div>
+            <div class="progress-area" id="p2tProgressArea" style="display:none;"><p class="drop-zone__sub" id="p2tStatus">Working…</p><div class="scan-progress-bar"><div class="scan-progress-fill" id="p2tProgressFill"></div></div></div>
+            <div class="results-area" id="p2tResultsArea" style="display:none;"><div class="results-header"><h3 class="results-title">Extracted Text</h3><div class="results-actions"><button class="btn btn--sm btn--ghost" id="p2tCopyBtn">Copy</button></div></div><textarea class="results-text" id="p2tResultsText" readonly></textarea><div class="download-section"><button class="btn btn--primary btn--download" id="p2tDownloadBtn">Download .txt</button></div></div>
+          </div>
+
+          <!-- ══ OCR chrome (Upload/Camera tabs only) ══ -->
+          <div id="ocrChrome">
           <!-- Options Row -->
           <div class="options-row">
             <div class="option-group"><label for="ocrLang">Source Language</label><select id="ocrLang">
@@ -343,6 +425,7 @@
 
           <!-- Results Area -->
           <div class="results-area" id="resultsArea" style="display:none;"><div class="results-header"><h3 class="results-title">Extracted Text</h3><div class="results-actions"><button class="btn btn--sm btn--ghost" id="copyBtn">Copy</button><button class="btn btn--sm btn--ghost" id="clearResultsBtn">Clear</button></div></div><textarea class="results-text" id="resultsText" placeholder="Extracted text will appear here…"></textarea><div class="translate-section"><h4 class="translate-title">Translate Extracted Text</h4><div class="translate-controls"><select id="translateTo"><option value="">— Select target language —</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="zh">Chinese</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="ar">Arabic</option></select><button class="btn btn--secondary" id="translateBtn">Translate</button></div><div class="translated-output" id="translatedOutput" style="display:none;"><div class="translated-output__header"><span id="translatedLangLabel">Translation</span><button class="btn btn--sm btn--ghost" id="copyTranslatedBtn">Copy</button></div><div class="translated-output__text" id="translatedText"></div></div></div><div class="download-section"><button class="btn btn--primary btn--download" id="downloadBtn">Download Document</button></div></div>
+          </div><!-- /ocrChrome -->
         </div>
 
         <!-- Right Sidebar Ad (300x250 or 160x600 responsive) -->

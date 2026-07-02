@@ -126,12 +126,24 @@ function switchTab(tab) {
     panel.classList.toggle('active', panel.id === `panel${tab.charAt(0).toUpperCase() + tab.slice(1)}`);
   });
 
+  const ocrChrome = document.getElementById('ocrChrome');
+  if (ocrChrome) ocrChrome.style.display = (tab === 'upload' || tab === 'camera') ? '' : 'none';
+
   if (tab !== 'camera') stopCamera();
   updateProcessButton();
 }
 
 if (dom.tabUpload) dom.tabUpload.addEventListener('click', () => switchTab('upload'));
 if (dom.tabCamera) dom.tabCamera.addEventListener('click', () => switchTab('camera'));
+const tabImg2pdf = $('tabImg2pdf'), tabTxt2pdf = $('tabTxt2pdf'), tabPdf2img = $('tabPdf2img'), tabPdf2txt = $('tabPdf2txt');
+if (tabImg2pdf) tabImg2pdf.addEventListener('click', () => switchTab('img2pdf'));
+if (tabTxt2pdf) tabTxt2pdf.addEventListener('click', () => switchTab('txt2pdf'));
+if (tabPdf2img) tabPdf2img.addEventListener('click', () => switchTab('pdf2img'));
+if (tabPdf2txt) tabPdf2txt.addEventListener('click', () => switchTab('pdf2txt'));
+
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.js';
+}
 
 // ═══════════════════════════════════════════════════
 //  FILE UPLOAD / DROP ZONE
@@ -760,6 +772,378 @@ function loadScript(src) {
     document.head.appendChild(script);
   });
 }
+
+// ═══════════════════════════════════════════════════
+//  PDF TOOL HELPERS
+// ═══════════════════════════════════════════════════
+function parsePageRange(str, totalPages) {
+  if (!str || !str.trim() || str.trim().toLowerCase() === 'all') {
+    return Array.from({ length: totalPages }, (_, i) => i + 1);
+  }
+  const pages = new Set();
+  str.split(',').forEach(part => {
+    part = part.trim();
+    if (!part) return;
+    if (part.includes('-')) {
+      const [a, b] = part.split('-').map(n => parseInt(n.trim(), 10));
+      if (Number.isFinite(a) && Number.isFinite(b)) {
+        for (let i = Math.max(1, a); i <= Math.min(totalPages, b); i++) pages.add(i);
+      }
+    } else {
+      const n = parseInt(part, 10);
+      if (Number.isFinite(n) && n >= 1 && n <= totalPages) pages.add(n);
+    }
+  });
+  return [...pages].sort((a, b) => a - b);
+}
+
+function requireLib(name, obj) {
+  if (typeof obj === 'undefined') {
+    showToast(`${name} failed to load. Check your internet connection and reload the page.`, 'error');
+    return false;
+  }
+  return true;
+}
+
+// ═══════════════════════════════════════════════════
+//  IMAGE → PDF
+// ═══════════════════════════════════════════════════
+const i2pState = { images: [] }; // { file, url }
+
+const i2pDropZone = $('i2pDropZone'), i2pFileInput = $('i2pFileInput'), i2pList = $('i2pList'), i2pGenerateBtn = $('i2pGenerateBtn');
+
+if (i2pDropZone) {
+  i2pDropZone.addEventListener('click', () => i2pFileInput?.click());
+  i2pDropZone.addEventListener('dragover', e => { e.preventDefault(); i2pDropZone.classList.add('dragover'); });
+  i2pDropZone.addEventListener('dragleave', () => i2pDropZone.classList.remove('dragover'));
+  i2pDropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    i2pDropZone.classList.remove('dragover');
+    addI2pFiles(e.dataTransfer?.files);
+  });
+}
+if (i2pFileInput) {
+  i2pFileInput.addEventListener('click', e => e.stopPropagation());
+  i2pFileInput.addEventListener('change', e => addI2pFiles(e.target.files));
+}
+
+function addI2pFiles(fileList) {
+  if (!fileList) return;
+  [...fileList].forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    i2pState.images.push({ file, url: URL.createObjectURL(file) });
+  });
+  renderI2pList();
+}
+
+function renderI2pList() {
+  if (!i2pList) return;
+  i2pList.innerHTML = '';
+  i2pState.images.forEach((item, idx) => {
+    const div = document.createElement('div');
+    div.className = 'i2p-item';
+    div.innerHTML = `
+      <img src="${item.url}" alt="Page ${idx + 1}" />
+      <div class="i2p-item__label">Page ${idx + 1}</div>
+      <div class="i2p-item__controls">
+        <button data-act="up" title="Move up">↑</button>
+        <button data-act="down" title="Move down">↓</button>
+        <button data-act="remove" class="i2p-item__remove" title="Remove">✕</button>
+      </div>`;
+    div.querySelector('[data-act="up"]').addEventListener('click', () => { if (idx > 0) { [i2pState.images[idx-1], i2pState.images[idx]] = [i2pState.images[idx], i2pState.images[idx-1]]; renderI2pList(); } });
+    div.querySelector('[data-act="down"]').addEventListener('click', () => { if (idx < i2pState.images.length - 1) { [i2pState.images[idx+1], i2pState.images[idx]] = [i2pState.images[idx], i2pState.images[idx+1]]; renderI2pList(); } });
+    div.querySelector('[data-act="remove"]').addEventListener('click', () => { URL.revokeObjectURL(item.url); i2pState.images.splice(idx, 1); renderI2pList(); });
+    i2pList.appendChild(div);
+  });
+  if (i2pGenerateBtn) i2pGenerateBtn.disabled = i2pState.images.length === 0;
+}
+
+function loadImageEl(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = url;
+  });
+}
+
+if (i2pGenerateBtn) {
+  i2pGenerateBtn.addEventListener('click', async () => {
+    if (!requireLib('jsPDF', window.jspdf)) return;
+    if (i2pState.images.length === 0) return;
+
+    const pageSizeMode = $('i2pPageSize').value;
+    const margin = parseInt($('i2pMargin').value, 10);
+    const quality = parseFloat($('i2pQuality').value);
+
+    i2pGenerateBtn.disabled = true;
+    const originalLabel = i2pGenerateBtn.textContent;
+    i2pGenerateBtn.textContent = 'Generating…';
+
+    try {
+      const { jsPDF } = window.jspdf;
+      const PAGE_SIZES = { a4: [595.28, 841.89], letter: [612, 792] };
+      let doc = null;
+
+      for (let i = 0; i < i2pState.images.length; i++) {
+        const img = await loadImageEl(i2pState.images[i].url);
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        canvas.getContext('2d').drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+        let pageW, pageH, drawW, drawH, x, y;
+        if (pageSizeMode === 'original') {
+          pageW = img.naturalWidth; pageH = img.naturalHeight;
+          drawW = pageW; drawH = pageH; x = 0; y = 0;
+        } else {
+          [pageW, pageH] = PAGE_SIZES[pageSizeMode];
+          const availW = pageW - margin * 2, availH = pageH - margin * 2;
+          const ratio = Math.min(availW / img.naturalWidth, availH / img.naturalHeight);
+          drawW = img.naturalWidth * ratio;
+          drawH = img.naturalHeight * ratio;
+          x = margin + (availW - drawW) / 2;
+          y = margin + (availH - drawH) / 2;
+        }
+
+        if (!doc) {
+          doc = new jsPDF({ unit: 'pt', format: [pageW, pageH] });
+        } else {
+          doc.addPage([pageW, pageH]);
+        }
+        doc.addImage(dataUrl, 'JPEG', x, y, drawW, drawH);
+      }
+
+      doc.save('scandoc_images.pdf');
+      showToast('PDF generated!', 'success');
+    } catch (err) {
+      console.error('Image→PDF error:', err);
+      showToast(`Failed to generate PDF: ${err.message}`, 'error');
+    } finally {
+      i2pGenerateBtn.disabled = false;
+      i2pGenerateBtn.textContent = originalLabel;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  TEXT → PDF
+// ═══════════════════════════════════════════════════
+const t2pGenerateBtn = $('t2pGenerateBtn');
+if (t2pGenerateBtn) {
+  t2pGenerateBtn.addEventListener('click', () => {
+    if (!requireLib('jsPDF', window.jspdf)) return;
+    const text = $('t2pText').value;
+    if (!text.trim()) { showToast('Please enter some text first.', 'error'); return; }
+
+    try {
+      const { jsPDF } = window.jspdf;
+      const font = $('t2pFont').value;
+      const size = parseInt($('t2pSize').value, 10);
+      const align = $('t2pAlign').value;
+      const margin = parseInt($('t2pMargin').value, 10);
+
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+      const maxWidth = pageW - margin * 2;
+      const lineHeight = size * 1.4;
+
+      doc.setFont(font, 'normal');
+      doc.setFontSize(size);
+
+      let y = margin;
+      const paragraphs = text.split('\n');
+      paragraphs.forEach(paragraph => {
+        const lines = paragraph.trim() === '' ? [''] : doc.splitTextToSize(paragraph, maxWidth);
+        lines.forEach(line => {
+          if (y > pageH - margin) { doc.addPage(); y = margin; }
+          const xPos = align === 'center' ? pageW / 2 : margin;
+          if (line) doc.text(line, xPos, y, { align: align === 'justify' ? 'left' : align, maxWidth: align === 'justify' ? maxWidth : undefined });
+          y += lineHeight;
+        });
+      });
+
+      doc.save('scandoc_text.pdf');
+      showToast('PDF generated!', 'success');
+    } catch (err) {
+      console.error('Text→PDF error:', err);
+      showToast(`Failed to generate PDF: ${err.message}`, 'error');
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  PDF → IMAGES
+// ═══════════════════════════════════════════════════
+const p2iDropZone = $('p2iDropZone'), p2iFileInput = $('p2iFileInput'), p2iConvertBtn = $('p2iConvertBtn');
+let p2iFile = null;
+
+if (p2iDropZone) {
+  p2iDropZone.addEventListener('click', () => p2iFileInput?.click());
+  p2iDropZone.addEventListener('dragover', e => { e.preventDefault(); p2iDropZone.classList.add('dragover'); });
+  p2iDropZone.addEventListener('dragleave', () => p2iDropZone.classList.remove('dragover'));
+  p2iDropZone.addEventListener('drop', e => { e.preventDefault(); p2iDropZone.classList.remove('dragover'); setP2iFile(e.dataTransfer?.files?.[0]); });
+}
+if (p2iFileInput) {
+  p2iFileInput.addEventListener('click', e => e.stopPropagation());
+  p2iFileInput.addEventListener('change', e => setP2iFile(e.target.files?.[0]));
+}
+function setP2iFile(file) {
+  if (!file || file.type !== 'application/pdf') { if (file) showToast('Please select a PDF file.', 'error'); return; }
+  p2iFile = file;
+  const nameEl = $('p2iFileName');
+  if (nameEl) { nameEl.textContent = `Selected: ${file.name}`; nameEl.style.display = 'block'; }
+  if (p2iConvertBtn) p2iConvertBtn.disabled = false;
+}
+
+if (p2iConvertBtn) {
+  p2iConvertBtn.addEventListener('click', async () => {
+    if (!requireLib('PDF.js', window.pdfjsLib)) return;
+    if (!p2iFile) return;
+
+    const format = $('p2iFormat').value;
+    const scale = parseFloat($('p2iScale').value);
+    const pageRangeStr = $('p2iPages').value;
+    const mime = format === 'jpeg' ? 'image/jpeg' : format === 'webp' ? 'image/webp' : 'image/png';
+    const ext = format === 'jpeg' ? 'jpg' : format;
+
+    const resultsEl = $('p2iResults'), progressArea = $('p2iProgressArea'), progressFill = $('p2iProgressFill');
+    resultsEl.innerHTML = '';
+    progressArea.style.display = 'block';
+    progressFill.style.width = '0%';
+    p2iConvertBtn.disabled = true;
+
+    try {
+      const arrayBuffer = await p2iFile.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pageNums = parsePageRange(pageRangeStr, pdf.numPages);
+      if (pageNums.length === 0) throw new Error('No valid pages selected.');
+
+      const blobs = [];
+      for (let i = 0; i < pageNums.length; i++) {
+        const pageNum = pageNums[i];
+        const page = await pdf.getPage(pageNum);
+        const viewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, mime, 0.92));
+        blobs.push({ pageNum, blob });
+
+        const url = URL.createObjectURL(blob);
+        const item = document.createElement('div');
+        item.className = 'i2p-item';
+        item.innerHTML = `<img src="${url}" alt="Page ${pageNum}" /><div class="i2p-item__label">Page ${pageNum}</div><a class="i2p-download" href="${url}" download="page_${pageNum}.${ext}">Download</a>`;
+        resultsEl.appendChild(item);
+
+        progressFill.style.width = `${Math.round(((i + 1) / pageNums.length) * 100)}%`;
+      }
+
+      if (blobs.length > 1 && requireLib('JSZip', window.JSZip)) {
+        const zip = new JSZip();
+        blobs.forEach(({ pageNum, blob }) => zip.file(`page_${pageNum}.${ext}`, blob));
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        downloadBlob(zipBlob, 'scandoc_pages.zip');
+      }
+
+      showToast(`Converted ${blobs.length} page(s)!`, 'success');
+    } catch (err) {
+      console.error('PDF→Images error:', err);
+      showToast(`Conversion failed: ${err.message}`, 'error');
+    } finally {
+      setTimeout(() => { progressArea.style.display = 'none'; }, 500);
+      p2iConvertBtn.disabled = false;
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  PDF → TEXT (with automatic OCR fallback for scanned pages)
+// ═══════════════════════════════════════════════════
+const p2tDropZone = $('p2tDropZone'), p2tFileInput = $('p2tFileInput'), p2tExtractBtn = $('p2tExtractBtn');
+let p2tFile = null;
+
+if (p2tDropZone) {
+  p2tDropZone.addEventListener('click', () => p2tFileInput?.click());
+  p2tDropZone.addEventListener('dragover', e => { e.preventDefault(); p2tDropZone.classList.add('dragover'); });
+  p2tDropZone.addEventListener('dragleave', () => p2tDropZone.classList.remove('dragover'));
+  p2tDropZone.addEventListener('drop', e => { e.preventDefault(); p2tDropZone.classList.remove('dragover'); setP2tFile(e.dataTransfer?.files?.[0]); });
+}
+if (p2tFileInput) {
+  p2tFileInput.addEventListener('click', e => e.stopPropagation());
+  p2tFileInput.addEventListener('change', e => setP2tFile(e.target.files?.[0]));
+}
+function setP2tFile(file) {
+  if (!file || file.type !== 'application/pdf') { if (file) showToast('Please select a PDF file.', 'error'); return; }
+  p2tFile = file;
+  const nameEl = $('p2tFileName');
+  if (nameEl) { nameEl.textContent = `Selected: ${file.name}`; nameEl.style.display = 'block'; }
+  if (p2tExtractBtn) p2tExtractBtn.disabled = false;
+}
+
+if (p2tExtractBtn) {
+  p2tExtractBtn.addEventListener('click', async () => {
+    if (!requireLib('PDF.js', window.pdfjsLib)) return;
+    if (!p2tFile) return;
+
+    const progressArea = $('p2tProgressArea'), progressFill = $('p2tProgressFill'), statusEl = $('p2tStatus');
+    const resultsArea = $('p2tResultsArea'), resultsText = $('p2tResultsText');
+    resultsArea.style.display = 'none';
+    progressArea.style.display = 'block';
+    progressFill.style.width = '0%';
+    p2tExtractBtn.disabled = true;
+
+    try {
+      const arrayBuffer = await p2tFile.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const ocrLang = dom.ocrLang?.value || 'eng';
+      let fullText = '';
+
+      for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        statusEl.textContent = `Reading page ${pageNum} of ${pdf.numPages}…`;
+        const page = await pdf.getPage(pageNum);
+        const textContent = await page.getTextContent();
+        const pageText = textContent.items.map(item => item.str).join(' ').trim();
+
+        if (pageText) {
+          fullText += pageText + '\n\n';
+        } else {
+          // No embedded text layer — this page is a scanned image. OCR it automatically.
+          statusEl.textContent = `Page ${pageNum} has no text layer — running OCR…`;
+          const viewport = page.getViewport({ scale: 2 });
+          const canvas = document.createElement('canvas');
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          const worker = await getOcrWorker(ocrLang);
+          const { data } = await worker.recognize(blob);
+          fullText += (data?.text || '').trim() + '\n\n';
+        }
+
+        progressFill.style.width = `${Math.round((pageNum / pdf.numPages) * 100)}%`;
+      }
+
+      resultsText.value = fullText.trim() || '(No text could be extracted from this PDF.)';
+      resultsArea.style.display = 'block';
+      showToast('Text extracted!', 'success');
+    } catch (err) {
+      console.error('PDF→Text error:', err);
+      showToast(`Extraction failed: ${err.message}`, 'error');
+    } finally {
+      progressArea.style.display = 'none';
+      p2tExtractBtn.disabled = false;
+    }
+  });
+}
+
+const p2tCopyBtn = $('p2tCopyBtn'), p2tDownloadBtn = $('p2tDownloadBtn');
+if (p2tCopyBtn) p2tCopyBtn.addEventListener('click', () => copyToClipboard($('p2tResultsText').value, 'Text copied!'));
+if (p2tDownloadBtn) p2tDownloadBtn.addEventListener('click', () => downloadTxt($('p2tResultsText').value));
 
 // ═══════════════════════════════════════════════════
 //  PWA INSTALLATION
