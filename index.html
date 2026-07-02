@@ -424,7 +424,37 @@
           <div class="progress-area" id="progressArea" style="display:none;"><div class="progress-steps"><div class="progress-step" id="ps1"><div class="ps-dot"></div><span>Preprocessing image</span></div><div class="progress-step" id="ps2"><div class="ps-dot"></div><span>Running OCR</span></div><div class="progress-step" id="ps3"><div class="ps-dot"></div><span>Extracting text</span></div><div class="progress-step" id="ps4"><div class="ps-dot"></div><span>Preparing output</span></div></div><div class="scan-progress-bar"><div class="scan-progress-fill" id="scanProgressFill"></div></div></div>
 
           <!-- Results Area -->
-          <div class="results-area" id="resultsArea" style="display:none;"><div class="results-header"><h3 class="results-title">Extracted Text</h3><div class="results-actions"><button class="btn btn--sm btn--ghost" id="copyBtn">Copy</button><button class="btn btn--sm btn--ghost" id="clearResultsBtn">Clear</button></div></div><textarea class="results-text" id="resultsText" placeholder="Extracted text will appear here…"></textarea><div class="translate-section"><h4 class="translate-title">Translate Extracted Text</h4><div class="translate-controls"><select id="translateTo"><option value="">— Select target language —</option><option value="es">Spanish</option><option value="fr">French</option><option value="de">German</option><option value="zh">Chinese</option><option value="ja">Japanese</option><option value="ko">Korean</option><option value="ar">Arabic</option></select><button class="btn btn--secondary" id="translateBtn">Translate</button></div><div class="translated-output" id="translatedOutput" style="display:none;"><div class="translated-output__header"><span id="translatedLangLabel">Translation</span><button class="btn btn--sm btn--ghost" id="copyTranslatedBtn">Copy</button></div><div class="translated-output__text" id="translatedText"></div></div></div><div class="download-section"><button class="btn btn--primary btn--download" id="downloadBtn">Download Document</button></div></div>
+          <div class="results-area" id="resultsArea" style="display:none;"><div class="results-header"><h3 class="results-title">Extracted Text</h3><div class="results-actions"><button class="btn btn--sm btn--ghost" id="copyBtn">Copy</button><button class="btn btn--sm btn--ghost" id="clearResultsBtn">Clear</button></div></div><textarea class="results-text" id="resultsText" placeholder="Extracted text will appear here…"></textarea><div class="translate-section"><h4 class="translate-title">Translate Extracted Text</h4><div class="translate-controls"><select id="translateTo">
+  <option value="">— Select target language —</option>
+  <option value="en">English</option>
+  <option value="ar">Arabic</option>
+  <option value="ur">Urdu</option>
+  <option value="fa">Persian (Farsi)</option>
+  <option value="hi">Hindi</option>
+  <option value="pa">Punjabi</option>
+  <option value="bn">Bengali</option>
+  <option value="ta">Tamil</option>
+  <option value="te">Telugu</option>
+  <option value="zh-CN">Chinese (Simplified)</option>
+  <option value="zh-TW">Chinese (Traditional)</option>
+  <option value="ja">Japanese</option>
+  <option value="ko">Korean</option>
+  <option value="ru">Russian</option>
+  <option value="fr">French</option>
+  <option value="de">German</option>
+  <option value="es">Spanish</option>
+  <option value="pt">Portuguese</option>
+  <option value="it">Italian</option>
+  <option value="tr">Turkish</option>
+  <option value="id">Indonesian</option>
+  <option value="th">Thai</option>
+  <option value="vi">Vietnamese</option>
+  <option value="nl">Dutch</option>
+  <option value="pl">Polish</option>
+  <option value="uk">Ukrainian</option>
+  <option value="el">Greek</option>
+  <option value="he">Hebrew</option>
+</select><button class="btn btn--secondary" id="translateBtn">Translate</button></div><div class="translated-output" id="translatedOutput" style="display:none;"><div class="translated-output__header"><span id="translatedLangLabel">Translation</span><button class="btn btn--sm btn--ghost" id="copyTranslatedBtn">Copy</button></div><div class="translated-output__text" id="translatedText"></div></div></div><div class="download-section"><button class="btn btn--primary btn--download" id="downloadBtn">Download Document</button></div></div>
           </div><!-- /ocrChrome -->
         </div>
 

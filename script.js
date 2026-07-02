@@ -1,20 +1,18 @@
 /**
  * ScanDoc — Main Application Script
- * Features: OCR, Camera Capture, Translation, DOCX Download
- * Backend: OCI Flask API
+ * Features: OCR, Camera Capture, Image/Text ↔ PDF, Translation, DOCX Download
+ * Everything runs client-side: Tesseract.js (OCR), PDF.js (PDF read/render),
+ * jsPDF (PDF generation), MyMemory (free translation API).
  * Ad Integration: Adsterra (SmartLink on Extract Text button)
  */
 
 // ═══════════════════════════════════════════════════
-//  CONFIGURATION — UPDATE THIS WITH YOUR BACKEND URL
+//  CONFIGURATION
 // ═══════════════════════════════════════════════════
 const CONFIG = {
-  // Legacy backend, still used for translation/DOCX until those are migrated too.
-  BACKEND_URL: 'https://api.silverfoxdynamics.com/scandoc',
   MAX_IMAGE_SIZE_MB: 10,
   RESIZE_MAX_DIMENSION: 2048,
   JPEG_QUALITY: 0.88,
-  DEMO_MODE: false,
 };
 
 // ═══════════════════════════════════════════════════
@@ -487,8 +485,36 @@ async function performOCR(imageBlob) {
 }
 
 // ═══════════════════════════════════════════════════
-//  TRANSLATION
+//  TRANSLATION (MyMemory — free, no API key, ~5000 words/day per IP)
 // ═══════════════════════════════════════════════════
+const TESS_TO_ISO639_1 = {
+  eng: 'en', ara: 'ar', urd: 'ur', fas: 'fa', hin: 'hi', pan: 'pa', ben: 'bn', tam: 'ta', tel: 'te',
+  chi_sim: 'zh-CN', chi_tra: 'zh-TW', jpn: 'ja', kor: 'ko', rus: 'ru', fra: 'fr', deu: 'de', spa: 'es',
+  por: 'pt', ita: 'it', tur: 'tr', ind: 'id', tha: 'th', vie: 'vi', nld: 'nl', pol: 'pl', ukr: 'uk', ell: 'el', heb: 'he',
+};
+
+function chunkTextForTranslation(text, maxLen = 450) {
+  const lines = text.split('\n');
+  const chunks = [];
+  let current = [];
+  let currentLen = 0;
+  for (const line of lines) {
+    if (line.length > maxLen) {
+      if (current.length) { chunks.push(current.join('\n')); current = []; currentLen = 0; }
+      for (let i = 0; i < line.length; i += maxLen) chunks.push(line.slice(i, i + maxLen));
+      continue;
+    }
+    if (currentLen + line.length + 1 > maxLen && current.length) {
+      chunks.push(current.join('\n'));
+      current = []; currentLen = 0;
+    }
+    current.push(line);
+    currentLen += line.length + 1;
+  }
+  if (current.length) chunks.push(current.join('\n'));
+  return chunks;
+}
+
 if (dom.translateBtn) dom.translateBtn.addEventListener('click', runTranslate);
 
 async function runTranslate() {
@@ -521,23 +547,38 @@ async function runTranslate() {
 }
 
 async function performTranslation(text, targetLang) {
-    const response = await fetch(`${CONFIG.BACKEND_URL}/api/translate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            text: text.substring(0, 5000),
-            target: targetLang,
-            source: 'en'
-        }),
-    });
+  const sourceLang = TESS_TO_ISO639_1[dom.ocrLang?.value] || 'en';
+  if (sourceLang === targetLang) {
+    throw new Error('Source and target languages are the same.');
+  }
 
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error || `Server error ${response.status}`);
+  const chunks = chunkTextForTranslation(text);
+  const translated = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    if (!chunk.trim()) { translated.push(chunk); continue; }
+
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${sourceLang}|${targetLang}`;
+    let response;
+    try {
+      response = await fetch(url);
+    } catch {
+      throw new Error('Could not reach the translation service. Check your internet connection.');
     }
 
+    if (!response.ok) throw new Error(`Translation service error (${response.status})`);
     const data = await response.json();
-    return data.translated_text || text;
+
+    if (data.responseStatus && Number(data.responseStatus) !== 200) {
+      throw new Error(data.responseDetails || 'Daily free translation limit reached. Try again tomorrow or with shorter text.');
+    }
+
+    translated.push(data.responseData?.translatedText || chunk);
+    if (i < chunks.length - 1) await sleep(200); // stay polite to the free API's rate limit
+  }
+
+  return translated.join('\n');
 }
 
 // ═══════════════════════════════════════════════════
@@ -561,19 +602,12 @@ async function downloadDocument() {
   dom.downloadBtn.innerHTML = `<span class="btn-spinner"></span> Generating…`;
 
   try {
-    const response = await fetch(`${CONFIG.BACKEND_URL}/api/generate-docx`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-
-    if (!response.ok) throw new Error(`Server error ${response.status}`);
-
-    const blob = await response.blob();
+    const blob = await generateDocxClientSide(text);
     downloadBlob(blob, 'scandoc_output.docx');
     showToast('Document downloaded!', 'success');
   } catch (err) {
-    showToast(`Download failed: ${err.message}. Falling back to .txt`, 'error');
+    console.error('DOCX generation error:', err);
+    showToast(`DOCX generation failed: ${err.message}. Falling back to .txt`, 'error');
     downloadTxt(text);
   } finally {
     dom.downloadBtn.disabled = false;
